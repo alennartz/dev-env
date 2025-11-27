@@ -1,0 +1,29 @@
+# Claude Code
+.claude/
+
+# macOS
+.DS_Store
+._*
+.Spotlight-V100
+.Trashes
+
+# Windows
+Thumbs.db
+Desktop.ini
+
+# Linux
+.fuse_hidden*
+.Trash-*
+.nfs*
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.un~
+Session.vim
+
+# Docker build artifacts
+*.tar
