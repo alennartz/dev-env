@@ -5,11 +5,9 @@ FROM debian:bookworm-slim
 # ============================================
 RUN apt-get update && apt-get install -y \
     # Core tools
-    git curl wget unzip ca-certificates gnupg \
+    git curl wget unzip ca-certificates gnupg sudo \
     # Build essentials
     build-essential pkg-config libssl-dev \
-    # Firewall/networking
-    iptables iproute2 dnsutils \
     # Debugging/profiling
     gdb strace htop jq \
     # Search tools
@@ -76,11 +74,11 @@ RUN useradd -m -s /bin/bash developer && \
 RUN npm install -g @anthropic-ai/claude-code
 
 # ============================================
-# FIREWALL SCRIPT & CLAUDE CONTEXT
+# PROXY CA TRUST SCRIPT & CLAUDE CONTEXT
 # ============================================
-COPY init-firewall.sh /usr/local/bin/
+COPY trust-proxy-ca.sh /usr/local/bin/
 COPY CLAUDE.md /etc/claude-context/
-RUN chmod +x /usr/local/bin/init-firewall.sh
+RUN chmod 755 /usr/local/bin/trust-proxy-ca.sh
 
 # ============================================
 # USER SETUP

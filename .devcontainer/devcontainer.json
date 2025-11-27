@@ -1,0 +1,6 @@
+{
+  "name": "Claude Code Sandbox",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "sandbox",
+  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}"
+}

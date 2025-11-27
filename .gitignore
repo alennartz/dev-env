@@ -1,4 +1,4 @@
-# Claude Code
+a# Claude Code
 .claude/
 
 # macOS
@@ -17,7 +17,6 @@ Desktop.ini
 .nfs*
 
 # Editors
-.vscode/
 .idea/
 *.swp
 *.swo

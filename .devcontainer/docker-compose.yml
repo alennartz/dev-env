@@ -1,0 +1,21 @@
+services:
+  proxy:
+    image: claude-sandbox-proxy:latest
+    cap_add:
+      - NET_ADMIN
+    volumes:
+      - squid-ssl:/etc/squid/ssl
+
+  sandbox:
+    image: claude-sandbox:latest
+    network_mode: "service:proxy"
+    depends_on:
+      proxy:
+        condition: service_healthy
+    volumes:
+      - squid-ssl:/etc/squid/ssl:ro
+    entrypoint: ["/bin/bash", "/usr/local/bin/trust-proxy-ca.sh"]
+    command: ["sleep", "infinity"]
+
+volumes:
+  squid-ssl:

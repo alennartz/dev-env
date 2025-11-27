@@ -1,0 +1,76 @@
+# Domain Whitelist for Claude Code Sandbox
+# Lines starting with . match subdomains (e.g., .github.com matches api.github.com)
+
+# ============================================
+# CLAUDE API
+# ============================================
+.anthropic.com
+
+# ============================================
+# GIT HOSTING
+# ============================================
+.github.com
+.githubusercontent.com
+.githubassets.com
+
+# ============================================
+# CONTAINER REGISTRIES
+# ============================================
+.docker.io
+.docker.com
+ghcr.io
+# .mcr.microsoft.com - covered by .microsoft.com below
+
+# ============================================
+# NODE.JS / NPM
+# ============================================
+.npmjs.org
+.npmjs.com
+.nodejs.org
+.yarnpkg.com
+
+# ============================================
+# PYTHON
+# ============================================
+.pypi.org
+.pythonhosted.org
+.python.org
+
+# ============================================
+# .NET / NUGET
+# ============================================
+.nuget.org
+.microsoft.com
+# Note: .microsoft.com covers dotnet.microsoft.com, mcr.microsoft.com, azure.microsoft.com
+
+# ============================================
+# GO
+# ============================================
+.golang.org
+.go.dev
+# proxy.golang.org and sum.golang.org covered by .golang.org
+
+# ============================================
+# RUST
+# ============================================
+.crates.io
+.rust-lang.org
+.docs.rs
+# static.rust-lang.org covered by .rust-lang.org
+
+# ============================================
+# CLOUD PROVIDERS
+# ============================================
+# AWS
+.amazonaws.com
+.aws.amazon.com
+
+# Azure
+.azure.com
+# .azure.microsoft.com - covered by .microsoft.com above
+.microsoftonline.com
+
+# GCP
+.googleapis.com
+.google.com
+.gstatic.com
