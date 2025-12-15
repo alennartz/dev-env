@@ -41,32 +41,35 @@ RUN curl -sSL "https://go.dev/dl/$(curl -sSL 'https://go.dev/VERSION?m=text' | h
 ENV PATH="${PATH}:/usr/local/go/bin"
 
 # ============================================
-# RUST (latest stable)
-# ============================================
-ENV RUSTUP_HOME=/usr/local/rustup
-ENV CARGO_HOME=/usr/local/cargo
-ENV PATH="${PATH}:/usr/local/cargo/bin"
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path
-
-# ============================================
-# PYTHON TOOLS
-# ============================================
-RUN pipx install poetry && \
-    pipx install ruff
-ENV PATH="${PATH}:/root/.local/bin"
-
-# ============================================
 # YQ (YAML processor)
 # ============================================
 RUN curl -sSL https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -o /usr/bin/yq && \
     chmod +x /usr/bin/yq
 
 # ============================================
-# CREATE USER
+# CREATE USER (before Rust to avoid chown layer duplication)
 # ============================================
 RUN useradd -m -s /bin/bash developer && \
-    echo "developer ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers && \
-    chown -R developer:developer /usr/local/cargo /usr/local/rustup
+    echo "developer ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+
+# ============================================
+# RUST (latest stable) - installed as developer user
+# ============================================
+USER developer
+ENV RUSTUP_HOME=/home/developer/.rustup
+ENV CARGO_HOME=/home/developer/.cargo
+ENV PATH="${PATH}:/home/developer/.cargo/bin"
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path
+
+# ============================================
+# PYTHON TOOLS (as developer user)
+# ============================================
+RUN pipx install poetry && \
+    pipx install ruff
+ENV PATH="${PATH}:/home/developer/.local/bin"
+
+# Switch back to root for remaining system installs
+USER root
 
 # ============================================
 # CLAUDE CODE
@@ -86,10 +89,10 @@ RUN chmod 755 /usr/local/bin/trust-proxy-ca.sh
 USER developer
 WORKDIR /home/developer
 
-# User-level paths
-RUN mkdir -p ~/go/bin ~/.local/bin
+# User-level paths (note: ~/.local/bin already created by pipx)
+RUN mkdir -p ~/go/bin ~/.claude
 ENV GOPATH=/home/developer/go
-ENV PATH="${PATH}:/home/developer/go/bin:/home/developer/.local/bin"
+ENV PATH="${PATH}:/home/developer/go/bin"
 
 # Inform Claude CLI about context file
 RUN echo 'export CLAUDE_CONTEXT_FILE=/etc/claude-context/CLAUDE.md' >> ~/.bashrc

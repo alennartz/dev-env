@@ -26,3 +26,6 @@ Session.vim
 
 # Docker build artifacts
 *.tar
+
+# Generated devcontainer env file
+.devcontainer/.env

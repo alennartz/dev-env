@@ -1,6 +1,9 @@
 #!/bin/sh
 set -e
 
+# Remove stale PID file from previous runs (prevents "already running" errors)
+rm -f /var/run/squid.pid
+
 SSL_DIR=/etc/squid/ssl
 
 # Generate CA cert if not exists (persisted in volume)
