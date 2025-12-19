@@ -2,17 +2,44 @@
 
 A secure, network-isolated container for running Claude Code with `--dangerously-skip-permissions`.
 
-**→ [User Documentation](docs/getting-started.md)**
+## Published Images
 
-## For Contributors
+| Image | Purpose |
+|-------|---------|
+| `ghcr.io/OWNER/claude-sandbox-proxy` | Squid proxy with SSL bump + iptables (minimal whitelist) |
+| `ghcr.io/OWNER/claude-sandbox-base` | Minimal sandbox: Claude Code + git + essentials (no sudo) |
 
-This repo provides:
+## Quick Start (For Your Project)
 
-1. **Sandbox container** (`Dockerfile`) - Development environment with Claude Code and common runtimes
-2. **Proxy container** (`Dockerfile.proxy`) - Squid proxy with SSL bump and domain whitelist
-3. **Orchestration** (`.devcontainer/`) - Docker Compose setup for VS Code Dev Containers
+1. **Copy the template** to your project:
+   ```bash
+   cp -r template/ your-project/.devcontainer/
+   ```
 
-### Architecture
+2. **Update image references** in `docker-compose.yml`:
+   - Replace `OWNER` with the GitHub username/org
+
+3. **Configure credentials** (one-time setup on host):
+   ```bash
+   # Login to Claude (if not already)
+   claude login
+
+   # Enable --dangerously-skip-permissions without prompts
+   echo '{"bypassPermissionsModeAccepted": true}' > ~/.claude/settings.json
+   ```
+
+4. **Customize `whitelist.txt`** with domains your project needs
+
+5. **Open in VS Code** → "Reopen in Container"
+
+6. **Run Claude Code**:
+   ```bash
+   claude --dangerously-skip-permissions
+   ```
+
+See [template/README.md](template/README.md) for customization options.
+
+## Architecture
 
 ```text
 ┌─────────────────────────────────────────┐
@@ -22,52 +49,77 @@ This repo provides:
     iptables ──► squid ──► whitelist ──► internet
 ```
 
-The sandbox shares the proxy's network namespace. All traffic is forced through squid via iptables. Sandbox has no capabilities to modify network rules.
+- **Network isolation**: All traffic forced through proxy
+- **Domain whitelist**: Only explicitly allowed domains accessible
+- **No sudo**: Claude runs as unprivileged user
+- **Capability separation**: Only proxy has NET_ADMIN
+- **Read-only credentials**: Host auth files mounted as read-only
 
-### Repository Structure
+## Credentials
+
+The sandbox mounts two files from your host machine (both read-only):
+
+| File | Purpose |
+|------|---------|
+| `~/.claude/.credentials.json` | OAuth tokens for Anthropic API |
+| `~/.claude/settings.json` | Contains `bypassPermissionsModeAccepted: true` |
+
+This avoids re-authentication on every container rebuild while preventing the sandbox from modifying your host configuration.
+
+## Repository Structure
 
 ```text
-├── Dockerfile              # Sandbox image (runtimes, tools, Claude Code)
-├── Dockerfile.proxy        # Proxy image (squid, iptables)
-├── proxy-entrypoint.sh     # Sets up iptables, starts squid
-├── squid.conf              # Squid transparent proxy config
-├── whitelist.txt           # Allowed domains
-├── trust-proxy-ca.sh       # Imports proxy CA into sandbox trust store
-├── .devcontainer/          # Minimal VS Code devcontainer config
+├── images/                    # Published to GHCR
+│   ├── proxy/                 # Squid proxy with iptables
+│   │   ├── Dockerfile
+│   │   ├── squid.conf
+│   │   ├── whitelist.txt      # Minimal: only .anthropic.com
+│   │   └── proxy-entrypoint.sh
+│   └── base/                  # Minimal sandbox
+│       ├── Dockerfile
+│       └── trust-proxy-ca.sh
+├── template/                  # Copy to your project's .devcontainer/
 │   ├── devcontainer.json
-│   └── docker-compose.yml
-├── docs/                   # User-facing documentation
-└── CLAUDE.md               # Context for Claude when editing this repo
+│   ├── docker-compose.yml
+│   ├── whitelist.txt          # Example with common domains
+│   └── README.md
+├── local/                     # Personal full sandbox (not published)
+│   ├── Dockerfile             # Full dev environment with many runtimes
+│   └── whitelist.txt          # Extended whitelist for this repo
+├── .devcontainer/             # Uses local builds for this repo
+├── .github/workflows/         # CI/CD for publishing images
+├── Makefile                   # Build helpers
+└── CLAUDE.md                  # Context for Claude
 ```
 
-### Development
+## Development
 
-This repo uses itself for development:
+### Building Locally
 
 ```bash
-# Open in VS Code and "Reopen in Container"
-# Or manually:
-docker compose -f .devcontainer/docker-compose.yml build
-docker compose -f .devcontainer/docker-compose.yml up -d
-docker compose -f .devcontainer/docker-compose.yml exec sandbox bash
+make build-all     # Build all images
+make test          # Test the setup
+make clean         # Clean up
 ```
 
-### Key Design Decisions
+### Using VS Code
 
-- **Two containers** - Capability separation (NET_ADMIN only on proxy)
-- **Shared network namespace** - Proxy's iptables rules apply to sandbox
-- **SSL bump** - Full HTTPS inspection without proxy env vars
-- **Root files, minimal .devcontainer/** - Users copy minimal config, reference images
-
-### Testing Changes
-
-1. Edit files in root (`Dockerfile`, `squid.conf`, `whitelist.txt`, etc.)
-2. Rebuild: `docker compose -f .devcontainer/docker-compose.yml build`
-3. Test: `docker compose -f .devcontainer/docker-compose.yml up`
+Open this folder in VS Code and "Reopen in Container" to develop with the full local sandbox.
 
 ### Publishing Images
 
-TODO: Set up GitHub Actions to publish to `ghcr.io`.
+Images are automatically published to GHCR on push to main or release:
+
+```bash
+# Manual push (requires docker login to ghcr.io)
+make push
+```
+
+## Whitelist Strategy
+
+- **Proxy image** ships with minimal whitelist (just `.anthropic.com`)
+- **Users must mount their own whitelist** to allow git, npm, etc.
+- **Template** provides a starting point with common domains
 
 ## License
 

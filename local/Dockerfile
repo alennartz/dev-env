@@ -1,30 +1,31 @@
-FROM debian:bookworm-slim
+# Full development sandbox - extends base with additional runtimes
+# This is a personal/opinionated setup, not published to GHCR
+
+FROM claude-sandbox-base:latest
+
+USER root
 
 # ============================================
-# SYSTEM PACKAGES
+# ADDITIONAL SYSTEM PACKAGES
 # ============================================
 RUN apt-get update && apt-get install -y \
-    # Core tools
-    git curl wget unzip ca-certificates gnupg sudo \
+    # Additional core tools
+    unzip sudo \
     # Build essentials
     build-essential pkg-config libssl-dev \
     # Debugging/profiling
-    gdb strace htop jq \
+    gdb strace htop \
     # Search tools
-    fzf ripgrep fd-find \
+    fzf fd-find \
     # Python
     python3 python3-pip python3-venv pipx \
     && rm -rf /var/lib/apt/lists/*
 
 # Symlink for fd (different name in Debian)
-RUN ln -s /usr/bin/fdfind /usr/bin/fd
+RUN ln -s /usr/bin/fdfind /usr/bin/fd 2>/dev/null || true
 
-# ============================================
-# NODE.JS (minimal, only for Claude Code)
-# ============================================
-RUN curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - && \
-    apt-get install -y nodejs && \
-    rm -rf /var/lib/apt/lists/*
+# Add sudo for developer (local dev only - NOT in published base)
+RUN echo "developer ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 
 # ============================================
 # .NET SDK (latest LTS)
@@ -47,12 +48,6 @@ RUN curl -sSL https://github.com/mikefarah/yq/releases/latest/download/yq_linux_
     chmod +x /usr/bin/yq
 
 # ============================================
-# CREATE USER (before Rust to avoid chown layer duplication)
-# ============================================
-RUN useradd -m -s /bin/bash developer && \
-    echo "developer ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
-
-# ============================================
 # RUST (latest stable) - installed as developer user
 # ============================================
 USER developer
@@ -72,16 +67,9 @@ ENV PATH="${PATH}:/home/developer/.local/bin"
 USER root
 
 # ============================================
-# CLAUDE CODE
+# CLAUDE CONTEXT FILE
 # ============================================
-RUN npm install -g @anthropic-ai/claude-code
-
-# ============================================
-# PROXY CA TRUST SCRIPT & CLAUDE CONTEXT
-# ============================================
-COPY trust-proxy-ca.sh /usr/local/bin/
 COPY CLAUDE.md /etc/claude-context/
-RUN chmod 755 /usr/local/bin/trust-proxy-ca.sh
 
 # ============================================
 # USER SETUP
@@ -89,7 +77,7 @@ RUN chmod 755 /usr/local/bin/trust-proxy-ca.sh
 USER developer
 WORKDIR /home/developer
 
-# User-level paths (note: ~/.local/bin already created by pipx)
+# User-level paths
 RUN mkdir -p ~/go/bin ~/.claude
 ENV GOPATH=/home/developer/go
 ENV PATH="${PATH}:/home/developer/go/bin"

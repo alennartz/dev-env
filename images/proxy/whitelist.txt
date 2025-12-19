@@ -1,0 +1,3 @@
+# Minimal whitelist - only Claude API
+# Users should mount their own whitelist to add additional domains
+.anthropic.com

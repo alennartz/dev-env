@@ -1,0 +1,27 @@
+# Claude Code Sandbox - Domain Whitelist
+# Add domains your project needs access to
+
+# ============================================
+# REQUIRED - Claude API
+# ============================================
+.anthropic.com
+
+# ============================================
+# GIT HOSTING
+# ============================================
+.github.com
+.githubusercontent.com
+.githubassets.com
+
+# ============================================
+# NPM REGISTRY (example)
+# ============================================
+.npmjs.org
+.npmjs.com
+registry.npmjs.org
+
+# ============================================
+# ADD YOUR DOMAINS BELOW
+# ============================================
+# .example.com
+# api.yourservice.com

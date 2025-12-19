@@ -1,12 +1,20 @@
+# Local development compose - uses locally built images
 services:
   proxy:
+    build:
+      context: ../images/proxy
     image: claude-sandbox-proxy:latest
     cap_add:
       - NET_ADMIN
     volumes:
       - squid-ssl:/etc/squid/ssl
+      # Use local whitelist with full domain set for this repo
+      - ../local/whitelist.txt:/etc/squid/whitelist.txt:ro
 
   sandbox:
+    build:
+      context: ..
+      dockerfile: local/Dockerfile
     image: claude-sandbox:latest
     network_mode: "service:proxy"
     depends_on:
@@ -18,6 +26,7 @@ services:
       - squid-ssl:/etc/squid/ssl:ro
       - ..:/workspaces/${LOCAL_WORKSPACE_FOLDER_BASENAME}:cached
       - ${HOME}/.claude/.credentials.json:/home/developer/.claude/.credentials.json:ro
+      - ${HOME}/.claude/settings.json:/home/developer/.claude/settings.json:ro
     entrypoint: ["/bin/bash", "/usr/local/bin/trust-proxy-ca.sh"]
     command: ["sleep", "infinity"]
 
