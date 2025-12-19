@@ -43,7 +43,7 @@ sudo /usr/local/bin/trust-proxy-ca.sh
 4. For Node.js specifically, ensure the env var is set:
 
 ```bash
-export NODE_EXTRA_CA_CERTS=/etc/squid/ssl/squid-ca.pem
+export NODE_EXTRA_CA_CERTS=/etc/squid/ssl/squid-ca-cert.pem
 ```
 
 ## Connection Refused

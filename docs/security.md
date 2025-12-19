@@ -37,7 +37,7 @@ This sandbox is designed for running Claude Code with `--dangerously-skip-permis
 
 - Cannot modify iptables rules
 - Cannot access host network
-- Cannot escalate privileges beyond `developer` user with sudo
+- Cannot escalate privileges (no sudo in base image)
 
 ✅ **NET_ADMIN isolated to proxy**
 

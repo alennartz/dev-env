@@ -4,7 +4,7 @@ Customize the sandbox for your needs.
 
 ## Adding Whitelisted Domains
 
-The default whitelist includes Claude API, GitHub, and common package managers. To add more domains:
+The published proxy image includes only `.anthropic.com` by default. The template includes additional common domains (GitHub, npm). To add more domains:
 
 ### Option 1: Fork and Modify
 
@@ -52,21 +52,6 @@ api.example.com
 registry.npmjs.org
 ```
 
-## Default Whitelisted Domains
-
-| Category | Domains |
-|----------|---------|
-| Claude API | `.anthropic.com` |
-| GitHub | `.github.com`, `.githubusercontent.com` |
-| npm | `.npmjs.org`, `.npmjs.com` |
-| Python | `.pypi.org`, `.pythonhosted.org` |
-| .NET | `.nuget.org`, `.microsoft.com` |
-| Go | `.golang.org`, `.go.dev` |
-| Rust | `.crates.io`, `.rust-lang.org` |
-| AWS | `.amazonaws.com` |
-| Azure | `.azure.com`, `.azure.microsoft.com` |
-| GCP | `.googleapis.com`, `.google.com` |
-
 ## Environment Variables
 
 Pass environment variables to the sandbox:
@@ -105,7 +90,7 @@ To add tools or runtimes, create your own Dockerfile:
 
 ```dockerfile
 # .devcontainer/Dockerfile
-FROM ghcr.io/alennartz/claude-sandbox:latest
+FROM ghcr.io/alennartz/claude-sandbox-base:latest
 
 # Add your tools
 RUN apt-get update && apt-get install -y \

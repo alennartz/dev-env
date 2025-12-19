@@ -30,26 +30,31 @@ services:
     image: ghcr.io/alennartz/claude-sandbox-proxy:latest
     # Or build from source:
     # build:
-    #   context: https://github.com/alennartz/dev-env.git
-    #   dockerfile: Dockerfile.proxy
+    #   context: https://github.com/alennartz/dev-env.git#main:images/proxy
+    #   dockerfile: Dockerfile
     cap_add:
       - NET_ADMIN
     volumes:
       - squid-ssl:/etc/squid/ssl
 
   sandbox:
-    image: ghcr.io/alennartz/claude-sandbox:latest
+    image: ghcr.io/alennartz/claude-sandbox-base:latest
     # Or build from source:
     # build:
-    #   context: https://github.com/alennartz/dev-env.git
+    #   context: https://github.com/alennartz/dev-env.git#main:images/base
     #   dockerfile: Dockerfile
     network_mode: "service:proxy"
     depends_on:
       proxy:
         condition: service_healthy
+    environment:
+      - NODE_EXTRA_CA_CERTS=/etc/squid/ssl/squid-ca-cert.pem
     volumes:
       - squid-ssl:/etc/squid/ssl:ro
-    entrypoint: ["/usr/local/bin/trust-proxy-ca.sh"]
+      # Mount Claude credentials from host (required for authentication)
+      - ${HOME}/.claude/.credentials.json:/home/developer/.claude/.credentials.json:ro
+      - ${HOME}/.claude/settings.json:/home/developer/.claude/settings.json:ro
+    entrypoint: ["/bin/bash", "/usr/local/bin/trust-proxy-ca.sh"]
     command: ["sleep", "infinity"]
 
 volumes:
