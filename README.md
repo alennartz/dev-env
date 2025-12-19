@@ -6,8 +6,8 @@ A secure, network-isolated container for running Claude Code with `--dangerously
 
 | Image | Purpose |
 |-------|---------|
-| `ghcr.io/OWNER/claude-sandbox-proxy` | Squid proxy with SSL bump + iptables (minimal whitelist) |
-| `ghcr.io/OWNER/claude-sandbox-base` | Minimal sandbox: Claude Code + git + essentials (no sudo) |
+| `ghcr.io/alennartz/claude-sandbox-proxy` | Squid proxy with SSL bump + iptables (minimal whitelist) |
+| `ghcr.io/alennartz/claude-sandbox-base` | Minimal sandbox: Claude Code + git + essentials (no sudo) |
 
 ## Quick Start (For Your Project)
 
@@ -16,10 +16,7 @@ A secure, network-isolated container for running Claude Code with `--dangerously
    cp -r template/ your-project/.devcontainer/
    ```
 
-2. **Update image references** in `docker-compose.yml`:
-   - Replace `OWNER` with the GitHub username/org
-
-3. **Configure credentials** (one-time setup on host):
+2. **Configure credentials** (one-time setup on host):
    ```bash
    # Login to Claude (if not already)
    claude login
@@ -28,11 +25,11 @@ A secure, network-isolated container for running Claude Code with `--dangerously
    echo '{"bypassPermissionsModeAccepted": true}' > ~/.claude/settings.json
    ```
 
-4. **Customize `whitelist.txt`** with domains your project needs
+3. **Customize `whitelist.txt`** with domains your project needs
 
-5. **Open in VS Code** → "Reopen in Container"
+4. **Open in VS Code** → "Reopen in Container"
 
-6. **Run Claude Code**:
+5. **Run Claude Code**:
    ```bash
    claude --dangerously-skip-permissions
    ```

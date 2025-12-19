@@ -27,7 +27,7 @@ Create a local whitelist file and mount it:
 # .devcontainer/docker-compose.yml
 services:
   proxy:
-    image: ghcr.io/YOUR_USERNAME/claude-sandbox-proxy:latest
+    image: ghcr.io/alennartz/claude-sandbox-proxy:latest
     cap_add:
       - NET_ADMIN
     volumes:
@@ -105,7 +105,7 @@ To add tools or runtimes, create your own Dockerfile:
 
 ```dockerfile
 # .devcontainer/Dockerfile
-FROM ghcr.io/YOUR_USERNAME/claude-sandbox:latest
+FROM ghcr.io/alennartz/claude-sandbox:latest
 
 # Add your tools
 RUN apt-get update && apt-get install -y \

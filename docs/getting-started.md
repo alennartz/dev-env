@@ -27,10 +27,10 @@ Create a `.devcontainer/` folder in your project with two files:
 ```yaml
 services:
   proxy:
-    image: ghcr.io/YOUR_USERNAME/claude-sandbox-proxy:latest
+    image: ghcr.io/alennartz/claude-sandbox-proxy:latest
     # Or build from source:
     # build:
-    #   context: https://github.com/YOUR_USERNAME/dev-env.git
+    #   context: https://github.com/alennartz/dev-env.git
     #   dockerfile: Dockerfile.proxy
     cap_add:
       - NET_ADMIN
@@ -38,10 +38,10 @@ services:
       - squid-ssl:/etc/squid/ssl
 
   sandbox:
-    image: ghcr.io/YOUR_USERNAME/claude-sandbox:latest
+    image: ghcr.io/alennartz/claude-sandbox:latest
     # Or build from source:
     # build:
-    #   context: https://github.com/YOUR_USERNAME/dev-env.git
+    #   context: https://github.com/alennartz/dev-env.git
     #   dockerfile: Dockerfile
     network_mode: "service:proxy"
     depends_on:

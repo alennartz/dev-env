@@ -6,22 +6,19 @@ This template sets up a secure, sandboxed environment for running Claude Code wi
 
 1. **Copy this folder** to your project's `.devcontainer/` directory
 
-2. **Update image references** in `docker-compose.yml`:
-   - Replace `OWNER` with the GitHub username/org hosting the images
-
-3. **Configure your host for `--dangerously-skip-permissions`**:
+2. **Configure your host for `--dangerously-skip-permissions`**:
    ```bash
    # Set the bypass flag (one-time setup)
    echo '{"bypassPermissionsModeAccepted": true}' > ~/.claude/settings.json
    ```
    This allows `--dangerously-skip-permissions` to work without prompts.
 
-4. **Customize the whitelist** in `whitelist.txt`:
+3. **Customize the whitelist** in `whitelist.txt`:
    - Add domains your project needs (package registries, APIs, etc.)
 
-5. **Open in VS Code** and click "Reopen in Container"
+4. **Open in VS Code** and click "Reopen in Container"
 
-6. **Run Claude Code**:
+5. **Run Claude Code**:
    ```bash
    claude --dangerously-skip-permissions
    ```
@@ -33,7 +30,7 @@ This template sets up a secure, sandboxed environment for running Claude Code wi
 Create a `Dockerfile` in your `.devcontainer/`:
 
 ```dockerfile
-FROM ghcr.io/OWNER/claude-sandbox-base:latest
+FROM ghcr.io/alennartz/claude-sandbox-base:latest
 
 USER root
 RUN apt-get update && apt-get install -y python3 python3-pip

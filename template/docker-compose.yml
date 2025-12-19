@@ -3,7 +3,7 @@
 
 services:
   proxy:
-    image: ghcr.io/OWNER/claude-sandbox-proxy:latest
+    image: ghcr.io/alennartz/claude-sandbox-proxy:latest
     cap_add:
       - NET_ADMIN
     volumes:
@@ -13,7 +13,7 @@ services:
 
   sandbox:
     # Option 1: Use base image directly
-    image: ghcr.io/OWNER/claude-sandbox-base:latest
+    image: ghcr.io/alennartz/claude-sandbox-base:latest
 
     # Option 2: Extend with your own Dockerfile
     # build:
