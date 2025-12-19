@@ -1,34 +1,41 @@
 #!/bin/bash
 # Trust the squid proxy CA certificate
 # This script runs as entrypoint wrapper in the sandbox container
+# Runs as root, installs CA, then drops privileges to developer user
 
-# Certificate-only PEM file (world-readable)
-CA_CERT=/etc/squid/ssl/squid-ca-cert.pem
+set -e
+
+CA_CERT="/etc/squid/ssl/squid-ca-cert.pem"
+TARGET_USER="${TARGET_USER:-developer}"
 
 # Wait for CA cert to be available (proxy generates it)
-MAX_WAIT=30
-WAITED=0
-while [ ! -f "$CA_CERT" ] && [ $WAITED -lt $MAX_WAIT ]; do
-    echo "Waiting for proxy CA certificate..."
+for i in {1..30}; do
+    [ -f "$CA_CERT" ] && break
+    echo "Waiting for proxy CA certificate... ($i/30)"
     sleep 1
-    WAITED=$((WAITED + 1))
 done
 
 if [ -f "$CA_CERT" ]; then
-    echo "Installing proxy CA certificate..."
-    # Copy the PEM certificate (update-ca-certificates needs .crt extension)
-    sudo cp "$CA_CERT" /usr/local/share/ca-certificates/squid-proxy-ca.crt
-    sudo update-ca-certificates
-
-    # Set Node.js to trust the CA
-    export NODE_EXTRA_CA_CERTS="$CA_CERT"
-    echo "export NODE_EXTRA_CA_CERTS=$CA_CERT" >> ~/.bashrc
-
-    echo "Proxy CA certificate installed."
+    # Running as root - install system-wide trust
+    if [ "$(id -u)" = "0" ]; then
+        echo "Installing proxy CA certificate..."
+        cp "$CA_CERT" /usr/local/share/ca-certificates/squid-proxy-ca.crt
+        update-ca-certificates
+        echo "Proxy CA certificate installed."
+    fi
 else
     echo "WARNING: Proxy CA certificate not found at $CA_CERT"
     echo "HTTPS connections may fail with certificate errors."
 fi
 
-# Execute the original command
-exec "$@"
+# Set Node.js CA environment variable
+export NODE_EXTRA_CA_CERTS="$CA_CERT"
+
+# Drop privileges and exec command
+if [ "$(id -u)" = "0" ]; then
+    # Persist NODE_EXTRA_CA_CERTS for interactive shells
+    echo "export NODE_EXTRA_CA_CERTS=$CA_CERT" >> /home/$TARGET_USER/.bashrc
+    exec gosu $TARGET_USER "$@"
+else
+    exec "$@"
+fi

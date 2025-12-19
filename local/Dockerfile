@@ -50,21 +50,17 @@ RUN curl -sSL https://github.com/mikefarah/yq/releases/latest/download/yq_linux_
 # ============================================
 # RUST (latest stable) - installed as developer user
 # ============================================
-USER developer
 ENV RUSTUP_HOME=/home/developer/.rustup
 ENV CARGO_HOME=/home/developer/.cargo
 ENV PATH="${PATH}:/home/developer/.cargo/bin"
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path
+RUN gosu developer sh -c 'curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path'
 
 # ============================================
 # PYTHON TOOLS (as developer user)
 # ============================================
-RUN pipx install poetry && \
-    pipx install ruff
+RUN gosu developer pipx install poetry && \
+    gosu developer pipx install ruff
 ENV PATH="${PATH}:/home/developer/.local/bin"
-
-# Switch back to root for remaining system installs
-USER root
 
 # ============================================
 # CLAUDE CONTEXT FILE
@@ -74,15 +70,17 @@ COPY CLAUDE.md /etc/claude-context/
 # ============================================
 # USER SETUP
 # ============================================
-USER developer
+# Note: No USER directive - entrypoint runs as root to install CA cert,
+# then drops privileges to developer via gosu (inherited from base image)
 WORKDIR /home/developer
 
-# User-level paths
-RUN mkdir -p ~/go/bin ~/.claude
+# User-level paths (run as root, set ownership)
+RUN mkdir -p /home/developer/go/bin /home/developer/.claude && \
+    chown -R developer:developer /home/developer/go /home/developer/.claude
 ENV GOPATH=/home/developer/go
 ENV PATH="${PATH}:/home/developer/go/bin"
 
 # Inform Claude CLI about context file
-RUN echo 'export CLAUDE_CONTEXT_FILE=/etc/claude-context/CLAUDE.md' >> ~/.bashrc
+RUN echo 'export CLAUDE_CONTEXT_FILE=/etc/claude-context/CLAUDE.md' >> /home/developer/.bashrc
 
 CMD ["/bin/bash"]

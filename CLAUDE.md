@@ -78,10 +78,21 @@ Personal opinionated dev environment with:
 
 - **Network isolation**: All traffic forced through proxy via iptables
 - **Domain whitelist**: Only explicitly allowed domains accessible
-- **No sudo**: Claude runs as unprivileged `developer` user
+- **Privilege drop via gosu**: Container starts as root to install CA cert, then permanently drops to `developer` user (see below)
+- **No sudo**: sudo is not installed in base image; gosu only works if already root
 - **Capability separation**: Only proxy has NET_ADMIN
 - **Transparent**: No proxy env vars needed
 - **Read-only credentials**: Host auth files mounted read-only
+
+### Why gosu instead of sudo?
+
+The `trust-proxy-ca.sh` entrypoint needs root to install the proxy's CA certificate. We use `gosu` to drop privileges permanently after init:
+
+```
+root (PID 1) → trust-proxy-ca.sh → exec gosu developer "$@" → developer (PID 1)
+```
+
+Unlike sudo, gosu cannot be used to regain root later - it requires `setuid()` which only root can call. See `docs/security.md` for details.
 
 ## Credentials
 

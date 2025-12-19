@@ -11,6 +11,7 @@ RUN apt-get update && apt-get install -y \
     gnupg \
     jq \
     ripgrep \
+    gosu \
     && rm -rf /var/lib/apt/lists/*
 
 # ============================================
@@ -39,8 +40,9 @@ RUN chmod 755 /usr/local/bin/trust-proxy-ca.sh
 # ============================================
 # USER SETUP
 # ============================================
-USER developer
+# Note: No USER directive - entrypoint runs as root to install CA cert,
+# then drops privileges to developer via gosu
 WORKDIR /home/developer
-RUN mkdir -p ~/.claude
+RUN mkdir -p /home/developer/.claude && chown developer:developer /home/developer/.claude
 
 CMD ["/bin/bash"]
