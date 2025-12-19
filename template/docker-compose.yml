@@ -1,0 +1,39 @@
+# Claude Code Sandbox - Docker Compose Template
+# Copy this folder to your project's .devcontainer/ directory
+
+services:
+  proxy:
+    image: ghcr.io/OWNER/claude-sandbox-proxy:latest
+    cap_add:
+      - NET_ADMIN
+    volumes:
+      - squid-ssl:/etc/squid/ssl
+      # Mount your whitelist (proxy only allows .anthropic.com by default)
+      - ./whitelist.txt:/etc/squid/whitelist.txt:ro
+
+  sandbox:
+    # Option 1: Use base image directly
+    image: ghcr.io/OWNER/claude-sandbox-base:latest
+
+    # Option 2: Extend with your own Dockerfile
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile
+
+    network_mode: "service:proxy"
+    depends_on:
+      proxy:
+        condition: service_healthy
+    environment:
+      - NODE_EXTRA_CA_CERTS=/etc/squid/ssl/squid-ca-cert.pem
+    volumes:
+      - squid-ssl:/etc/squid/ssl:ro
+      - ..:/workspaces/${LOCAL_WORKSPACE_FOLDER_BASENAME:-project}:cached
+      # Mount Claude credentials from host (required for authentication)
+      - ${HOME}/.claude/.credentials.json:/home/developer/.claude/.credentials.json:ro
+      - ${HOME}/.claude/settings.json:/home/developer/.claude/settings.json:ro
+    entrypoint: ["/bin/bash", "/usr/local/bin/trust-proxy-ca.sh"]
+    command: ["sleep", "infinity"]
+
+volumes:
+  squid-ssl:

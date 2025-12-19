@@ -1,0 +1,71 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Build all images",
+      "type": "shell",
+      "command": "docker build -t claude-sandbox-proxy:latest -f Dockerfile.proxy . && docker build -t claude-sandbox:latest -f Dockerfile .",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      }
+    },
+    {
+      "label": "Rebuild all (no cache)",
+      "type": "shell",
+      "command": "docker build --no-cache -t claude-sandbox-proxy:latest -f Dockerfile.proxy . && docker build --no-cache -t claude-sandbox:latest -f Dockerfile .",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      }
+    },
+    {
+      "label": "Start containers",
+      "type": "shell",
+      "command": "docker",
+      "args": ["compose", "-f", ".devcontainer/docker-compose.yml", "up", "-d"],
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      }
+    },
+    {
+      "label": "Stop containers",
+      "type": "shell",
+      "command": "docker",
+      "args": ["compose", "-f", ".devcontainer/docker-compose.yml", "down"],
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always"
+      }
+    },
+    {
+      "label": "View proxy logs",
+      "type": "shell",
+      "command": "docker",
+      "args": ["compose", "-f", ".devcontainer/docker-compose.yml", "logs", "-f", "proxy"],
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      }
+    },
+    {
+      "label": "Clean dangling images",
+      "type": "shell",
+      "command": "docker",
+      "args": ["image", "prune", "-f"],
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always"
+      }
+    }
+  ]
+}

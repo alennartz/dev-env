@@ -1,0 +1,7 @@
+{
+  "name": "Claude Code Sandbox",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "sandbox",
+  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
+  "initializeCommand": "echo 'LOCAL_WORKSPACE_FOLDER_BASENAME=${localWorkspaceFolderBasename}' > ${localWorkspaceFolder}/.devcontainer/.env"
+}

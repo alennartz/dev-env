@@ -1,32 +1,31 @@
-FROM debian:bookworm-slim
+# Full development sandbox - extends base with additional runtimes
+# This is a personal/opinionated setup, not published to GHCR
+
+FROM claude-sandbox-base:latest
+
+USER root
 
 # ============================================
-# SYSTEM PACKAGES
+# ADDITIONAL SYSTEM PACKAGES
 # ============================================
 RUN apt-get update && apt-get install -y \
-    # Core tools
-    git curl wget unzip ca-certificates gnupg \
+    # Additional core tools
+    unzip sudo \
     # Build essentials
     build-essential pkg-config libssl-dev \
-    # Firewall/networking
-    iptables iproute2 dnsutils \
     # Debugging/profiling
-    gdb strace htop jq \
+    gdb strace htop \
     # Search tools
-    fzf ripgrep fd-find \
+    fzf fd-find \
     # Python
     python3 python3-pip python3-venv pipx \
     && rm -rf /var/lib/apt/lists/*
 
 # Symlink for fd (different name in Debian)
-RUN ln -s /usr/bin/fdfind /usr/bin/fd
+RUN ln -s /usr/bin/fdfind /usr/bin/fd 2>/dev/null || true
 
-# ============================================
-# NODE.JS (minimal, only for Claude Code)
-# ============================================
-RUN curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - && \
-    apt-get install -y nodejs && \
-    rm -rf /var/lib/apt/lists/*
+# Add sudo for developer (local dev only - NOT in published base)
+RUN echo "developer ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 
 # ============================================
 # .NET SDK (latest LTS)
@@ -43,44 +42,34 @@ RUN curl -sSL "https://go.dev/dl/$(curl -sSL 'https://go.dev/VERSION?m=text' | h
 ENV PATH="${PATH}:/usr/local/go/bin"
 
 # ============================================
-# RUST (latest stable)
-# ============================================
-ENV RUSTUP_HOME=/usr/local/rustup
-ENV CARGO_HOME=/usr/local/cargo
-ENV PATH="${PATH}:/usr/local/cargo/bin"
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path
-
-# ============================================
-# PYTHON TOOLS
-# ============================================
-RUN pipx install poetry && \
-    pipx install ruff
-ENV PATH="${PATH}:/root/.local/bin"
-
-# ============================================
 # YQ (YAML processor)
 # ============================================
 RUN curl -sSL https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -o /usr/bin/yq && \
     chmod +x /usr/bin/yq
 
 # ============================================
-# CREATE USER
+# RUST (latest stable) - installed as developer user
 # ============================================
-RUN useradd -m -s /bin/bash developer && \
-    echo "developer ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers && \
-    chown -R developer:developer /usr/local/cargo /usr/local/rustup
+USER developer
+ENV RUSTUP_HOME=/home/developer/.rustup
+ENV CARGO_HOME=/home/developer/.cargo
+ENV PATH="${PATH}:/home/developer/.cargo/bin"
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path
 
 # ============================================
-# CLAUDE CODE
+# PYTHON TOOLS (as developer user)
 # ============================================
-RUN npm install -g @anthropic-ai/claude-code
+RUN pipx install poetry && \
+    pipx install ruff
+ENV PATH="${PATH}:/home/developer/.local/bin"
+
+# Switch back to root for remaining system installs
+USER root
 
 # ============================================
-# FIREWALL SCRIPT & CLAUDE CONTEXT
+# CLAUDE CONTEXT FILE
 # ============================================
-COPY init-firewall.sh /usr/local/bin/
 COPY CLAUDE.md /etc/claude-context/
-RUN chmod +x /usr/local/bin/init-firewall.sh
 
 # ============================================
 # USER SETUP
@@ -89,9 +78,9 @@ USER developer
 WORKDIR /home/developer
 
 # User-level paths
-RUN mkdir -p ~/go/bin ~/.local/bin
+RUN mkdir -p ~/go/bin ~/.claude
 ENV GOPATH=/home/developer/go
-ENV PATH="${PATH}:/home/developer/go/bin:/home/developer/.local/bin"
+ENV PATH="${PATH}:/home/developer/go/bin"
 
 # Inform Claude CLI about context file
 RUN echo 'export CLAUDE_CONTEXT_FILE=/etc/claude-context/CLAUDE.md' >> ~/.bashrc
