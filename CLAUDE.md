@@ -8,7 +8,7 @@ The repo is organized into three main areas:
 
 - **`images/`** - Published to GHCR (reusable by other repos)
 - **`template/`** - Files users copy to their project's `.devcontainer/`
-- **`local/`** - Personal full dev environment (not published)
+- **`local/`** - Extended whitelist and launch script (not published)
 
 The `.devcontainer/` folder is minimal and references the local builds.
 
@@ -30,9 +30,9 @@ dev-env/
 │   ├── docker-compose.yml     # References GHCR images
 │   ├── whitelist.txt          # Example with common domains
 │   └── README.md
-├── local/                     # Personal dev environment (not published)
-│   ├── Dockerfile             # Full sandbox with many runtimes
-│   └── whitelist.txt          # Extended whitelist for this repo
+├── local/                     # Extended whitelist and launch script
+│   ├── whitelist.txt          # Extended whitelist for this repo
+│   └── claude-sandbox.sh      # Launch helper script
 ├── .devcontainer/             # Uses local builds
 │   ├── devcontainer.json
 │   └── docker-compose.yml
@@ -68,10 +68,9 @@ Files for users to copy to their project's `.devcontainer/`:
 
 ### Local Development (local/)
 
-Personal opinionated dev environment with:
-- Python, .NET, Go, Rust runtimes
-- Build tools, debuggers
-- Extended whitelist
+Local files for this repo's development:
+- `whitelist.txt` - Extended domain whitelist for development
+- `claude-sandbox.sh` - Script to launch Claude in the sandbox
 - **Not published** - for this repo only
 
 ## Security Model
@@ -118,7 +117,6 @@ This enables `--dangerously-skip-permissions` without interactive prompts.
 make build-all     # Build all images
 make build-proxy   # Build proxy only
 make build-base    # Build base sandbox only
-make build-local   # Build full local sandbox
 make test          # Test the setup
 make clean         # Clean up
 ```
@@ -140,13 +138,6 @@ Manual: `make push` (requires `docker login ghcr.io`)
 Edit `local/whitelist.txt`, then rebuild:
 ```bash
 docker compose -f .devcontainer/docker-compose.yml build proxy
-```
-
-### Adding a tool to local sandbox
-
-Edit `local/Dockerfile`, then rebuild:
-```bash
-docker compose -f .devcontainer/docker-compose.yml build sandbox
 ```
 
 ### Updating published base image

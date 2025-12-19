@@ -13,9 +13,8 @@ services:
 
   sandbox:
     build:
-      context: ..
-      dockerfile: local/Dockerfile
-    image: claude-sandbox:latest
+      context: ../images/base
+    image: claude-sandbox-base:latest
     network_mode: "service:proxy"
     depends_on:
       proxy:

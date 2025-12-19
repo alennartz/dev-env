@@ -1,4 +1,4 @@
-.PHONY: build-proxy build-base build-local build-all push test clean help
+.PHONY: build-proxy build-base build-all push test clean help
 
 # Registry and owner for pushing images
 REGISTRY ?= ghcr.io
@@ -11,7 +11,6 @@ help:
 	@echo "  make build-all     Build all images locally"
 	@echo "  make build-proxy   Build proxy image"
 	@echo "  make build-base    Build base sandbox image"
-	@echo "  make build-local   Build full local sandbox image"
 	@echo "  make test          Test the local setup"
 	@echo "  make clean         Remove containers and images"
 	@echo ""
@@ -29,11 +28,8 @@ build-proxy:
 build-base:
 	docker build -t claude-sandbox-base:latest ./images/base
 
-build-local:
-	docker build -t claude-sandbox:latest -f local/Dockerfile .
-
 # Build all images
-build-all: build-proxy build-base build-local
+build-all: build-proxy build-base
 
 # Push to GHCR (requires docker login)
 push: build-proxy build-base
@@ -58,5 +54,5 @@ test: build-all
 # Clean up
 clean:
 	docker compose -f .devcontainer/docker-compose.yml down -v 2>/dev/null || true
-	docker rmi claude-sandbox-proxy:latest claude-sandbox-base:latest claude-sandbox:latest 2>/dev/null || true
+	docker rmi claude-sandbox-proxy:latest claude-sandbox-base:latest 2>/dev/null || true
 	@echo "Cleaned up containers and images"
