@@ -14,7 +14,7 @@ services:
   sandbox:
     build:
       context: ../images/base
-    image: claude-sandbox-base:latest
+    image: claude-sandbox-base:alpine
     network_mode: "service:proxy"
     depends_on:
       proxy:
@@ -24,9 +24,10 @@ services:
     volumes:
       - squid-ssl:/etc/squid/ssl:ro
       - ..:/workspaces/${LOCAL_WORKSPACE_FOLDER_BASENAME}:cached
-      - ${HOME}/.claude/.credentials.json:/home/developer/.claude/.credentials.json:ro
-      - ${HOME}/.claude/settings.json:/home/developer/.claude/settings.json:ro
-    entrypoint: ["/bin/bash", "/usr/local/bin/trust-proxy-ca.sh"]
+      # Mount credentials to staging location (entrypoint copies with correct ownership)
+      - ${HOME}/.claude/.credentials.json:/tmp/claude-creds/.credentials.json:ro
+      - ${HOME}/.claude/settings.json:/tmp/claude-creds/settings.json:ro
+    entrypoint: ["/bin/sh", "/usr/local/bin/trust-proxy-ca.sh"]
     command: ["sleep", "infinity"]
 
 volumes:

@@ -12,7 +12,7 @@ services:
       - ./whitelist.txt:/etc/squid/whitelist.txt:ro
 
   sandbox:
-    # Option 1: Use base image directly
+    # Option 1: Use base image directly (or :alpine for smaller image)
     image: ghcr.io/alennartz/claude-sandbox-base:latest
 
     # Option 2: Extend with your own Dockerfile
@@ -29,10 +29,10 @@ services:
     volumes:
       - squid-ssl:/etc/squid/ssl:ro
       - ..:/workspaces/${LOCAL_WORKSPACE_FOLDER_BASENAME:-project}:cached
-      # Mount Claude credentials from host (required for authentication)
-      - ${HOME}/.claude/.credentials.json:/home/developer/.claude/.credentials.json:ro
-      - ${HOME}/.claude/settings.json:/home/developer/.claude/settings.json:ro
-    entrypoint: ["/bin/bash", "/usr/local/bin/trust-proxy-ca.sh"]
+      # Mount Claude credentials to staging location (entrypoint copies with correct ownership)
+      - ${HOME}/.claude/.credentials.json:/tmp/claude-creds/.credentials.json:ro
+      - ${HOME}/.claude/settings.json:/tmp/claude-creds/settings.json:ro
+    entrypoint: ["/bin/sh", "/usr/local/bin/trust-proxy-ca.sh"]
     command: ["sleep", "infinity"]
 
 volumes:

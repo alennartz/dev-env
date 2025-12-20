@@ -60,4 +60,4 @@ start_containers() {
 start_containers
 
 log "Launching Claude Code in sandbox..."
-docker compose -f "$COMPOSE_FILE" exec -it sandbox bash -c 'claude --dangerously-skip-permissions'
+docker compose -f "$COMPOSE_FILE" exec -u developer -it sandbox claude --dangerously-skip-permissions

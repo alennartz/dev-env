@@ -1,20 +1,19 @@
-FROM node:22-slim
+FROM node:22-alpine
 
 # ============================================
 # SYSTEM PACKAGES (minimal)
 # ============================================
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apk add --no-cache \
     git \
     ca-certificates \
     jq \
     ripgrep \
-    gosu \
-    && rm -rf /var/lib/apt/lists/*
+    su-exec
 
 # ============================================
 # CREATE USER (no sudo for security)
 # ============================================
-RUN useradd -m -s /bin/bash developer
+RUN adduser -D -s /bin/sh developer
 
 # ============================================
 # CLAUDE CODE
@@ -33,8 +32,8 @@ RUN chmod 755 /usr/local/bin/trust-proxy-ca.sh
 # USER SETUP
 # ============================================
 # Note: No USER directive - entrypoint runs as root to install CA cert,
-# then drops privileges to developer via gosu
+# then drops privileges to developer via su-exec
 WORKDIR /home/developer
 RUN mkdir -p /home/developer/.claude && chown developer:developer /home/developer/.claude
 
-CMD ["/bin/bash"]
+CMD ["/bin/sh"]

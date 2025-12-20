@@ -23,8 +23,9 @@ dev-env/
 │   │   ├── whitelist.txt      # MINIMAL: only .anthropic.com
 │   │   └── proxy-entrypoint.sh
 │   └── base/
-│       ├── Dockerfile         # Minimal sandbox (Claude + git only)
-│       └── trust-proxy-ca.sh
+│       ├── Dockerfile         # Debian slim (default, ~418MB)
+│       ├── Dockerfile.alpine  # Alpine variant (~269MB, musl libc)
+│       └── trust-proxy-ca.sh  # POSIX-compatible (works on both)
 ├── template/                  # Users copy this to their .devcontainer/
 │   ├── devcontainer.json
 │   ├── docker-compose.yml     # References GHCR images
@@ -53,11 +54,16 @@ dev-env/
 - iptables to redirect all traffic
 - Ships with MINIMAL whitelist (only `.anthropic.com`)
 
-**`images/base/`** - Minimal sandbox:
-- Debian Bookworm slim
-- Node.js (for Claude Code)
-- Claude Code, git, ripgrep, jq
-- Non-root `developer` user with **NO SUDO**
+**`images/base/`** - Minimal sandbox (two variants):
+
+| Variant | Base | Size | Use Case |
+|---------|------|------|----------|
+| `Dockerfile` (default) | node:22-slim (Debian) | ~418MB | Maximum compatibility |
+| `Dockerfile.alpine` | node:22-alpine | ~269MB | Smallest size |
+
+Both include: Claude Code, git, ripgrep, jq, non-root `developer` user with **NO SUDO**
+
+> **Alpine caveat**: Uses musl libc. Some npm native modules and precompiled binaries may fail. Use Debian if extending the image.
 
 ### Template (template/)
 
@@ -77,30 +83,32 @@ Local files for this repo's development:
 
 - **Network isolation**: All traffic forced through proxy via iptables
 - **Domain whitelist**: Only explicitly allowed domains accessible
-- **Privilege drop via gosu**: Container starts as root to install CA cert, then permanently drops to `developer` user (see below)
+- **Privilege drop**: Container starts as root to install CA cert, then permanently drops to `developer` user via gosu (Debian) or su-exec (Alpine)
 - **No sudo**: sudo is not installed in base image; gosu only works if already root
 - **Capability separation**: Only proxy has NET_ADMIN
 - **Transparent**: No proxy env vars needed
 - **Read-only credentials**: Host auth files mounted read-only
 
-### Why gosu instead of sudo?
+### Why gosu/su-exec instead of sudo?
 
-The `trust-proxy-ca.sh` entrypoint needs root to install the proxy's CA certificate. We use `gosu` to drop privileges permanently after init:
+The `trust-proxy-ca.sh` entrypoint needs root to install the proxy's CA certificate. We use `gosu` (Debian) or `su-exec` (Alpine) to drop privileges permanently after init:
 
 ```
-root (PID 1) → trust-proxy-ca.sh → exec gosu developer "$@" → developer (PID 1)
+root (PID 1) → trust-proxy-ca.sh → exec gosu/su-exec developer "$@" → developer (PID 1)
 ```
 
-Unlike sudo, gosu cannot be used to regain root later - it requires `setuid()` which only root can call. See `docs/security.md` for details.
+Unlike sudo, these tools cannot be used to regain root later - they require `setuid()` which only root can call. The entrypoint script auto-detects which tool is available. See `docs/security.md` for details.
 
 ## Credentials
 
-The sandbox mounts two files from the host (both read-only):
+Credentials are mounted to a **staging location** (`/tmp/claude-creds/`) then copied by the entrypoint with correct ownership. This solves the UID mismatch between host users and the container's `developer` user.
 
-| File | Purpose |
-|------|---------|
-| `~/.claude/.credentials.json` | OAuth tokens for Anthropic API |
-| `~/.claude/settings.json` | Must contain `bypassPermissionsModeAccepted: true` |
+| Host File | Mounted To | Purpose |
+|-----------|------------|---------|
+| `~/.claude/.credentials.json` | `/tmp/claude-creds/` | OAuth tokens for Anthropic API |
+| `~/.claude/settings.json` | `/tmp/claude-creds/` | Must contain `bypassPermissionsModeAccepted: true` |
+
+The entrypoint (`trust-proxy-ca.sh`) copies these to `/home/developer/.claude/` and runs `chown` before dropping privileges.
 
 **Setup**: Users must run `claude login` on host, then set:
 ```bash
@@ -108,6 +116,8 @@ echo '{"bypassPermissionsModeAccepted": true}' > ~/.claude/settings.json
 ```
 
 This enables `--dangerously-skip-permissions` without interactive prompts.
+
+**Important**: The `devcontainer.json` must include `"remoteUser": "developer"` so VS Code sessions run as the correct user.
 
 ## Development Workflow
 
@@ -140,9 +150,11 @@ Edit `local/whitelist.txt`, then rebuild:
 docker compose -f .devcontainer/docker-compose.yml build proxy
 ```
 
-### Updating published base image
+### Updating published base images
 
-Edit `images/base/Dockerfile`, commit, push to main.
+Edit `images/base/Dockerfile` (Debian) or `images/base/Dockerfile.alpine`, commit, push to main.
+
+Both images are built and published automatically via GitHub Actions.
 
 ## Notes
 

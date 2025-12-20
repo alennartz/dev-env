@@ -18,9 +18,12 @@ Create a `.devcontainer/` folder in your project with two files:
   "name": "Claude Code Sandbox",
   "dockerComposeFile": "docker-compose.yml",
   "service": "sandbox",
-  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}"
+  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
+  "remoteUser": "developer"
 }
 ```
+
+> **Important**: The `remoteUser` setting ensures VS Code runs as the `developer` user, which has proper access to credentials.
 
 ### `.devcontainer/docker-compose.yml`
 
@@ -51,10 +54,10 @@ services:
       - NODE_EXTRA_CA_CERTS=/etc/squid/ssl/squid-ca-cert.pem
     volumes:
       - squid-ssl:/etc/squid/ssl:ro
-      # Mount Claude credentials from host (required for authentication)
-      - ${HOME}/.claude/.credentials.json:/home/developer/.claude/.credentials.json:ro
-      - ${HOME}/.claude/settings.json:/home/developer/.claude/settings.json:ro
-    entrypoint: ["/bin/bash", "/usr/local/bin/trust-proxy-ca.sh"]
+      # Mount credentials to staging location (entrypoint copies with correct ownership)
+      - ${HOME}/.claude/.credentials.json:/tmp/claude-creds/.credentials.json:ro
+      - ${HOME}/.claude/settings.json:/tmp/claude-creds/settings.json:ro
+    entrypoint: ["/bin/sh", "/usr/local/bin/trust-proxy-ca.sh"]
     command: ["sleep", "infinity"]
 
 volumes:

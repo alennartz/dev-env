@@ -106,3 +106,40 @@ volumes:
 - Proxy writes CA cert to volume
 - Sandbox reads CA cert from volume (read-only)
 - Certificate persists across container restarts
+
+## Credential Handling
+
+Host credentials (`~/.claude/.credentials.json` and `settings.json`) need special handling because:
+
+1. **Host files have restrictive permissions** (600, owner-only)
+2. **Host UID may not match container UID** (common: host is UID 1000, container `developer` is UID 1001)
+3. **Read-only mounts can't be chowned**
+
+The solution uses a **staging location**:
+
+```yaml
+volumes:
+  # Mount to staging location (not directly to ~/.claude)
+  - ${HOME}/.claude/.credentials.json:/tmp/claude-creds/.credentials.json:ro
+  - ${HOME}/.claude/settings.json:/tmp/claude-creds/settings.json:ro
+```
+
+The entrypoint script (`trust-proxy-ca.sh`) then:
+1. Runs as root initially
+2. Copies credentials from `/tmp/claude-creds/` to `/home/developer/.claude/`
+3. Sets correct ownership (`chown developer:developer`)
+4. Drops privileges to `developer` user via `gosu` (Debian) or `su-exec` (Alpine)
+
+This ensures the `developer` user can read credentials regardless of host UID.
+
+## User Configuration
+
+For VS Code Dev Containers, set `remoteUser` in `devcontainer.json`:
+
+```json
+{
+  "remoteUser": "developer"
+}
+```
+
+This ensures VS Code sessions run as `developer`, not root. Without this, you'd need to manually specify `-u developer` for `docker exec` commands.

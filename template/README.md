@@ -30,12 +30,15 @@ This template sets up a secure, sandboxed environment for running Claude Code wi
 Create a `Dockerfile` in your `.devcontainer/`:
 
 ```dockerfile
+# Use :latest (Debian) for apt-get, or :alpine for smaller image with apk
 FROM ghcr.io/alennartz/claude-sandbox-base:latest
 
 USER root
 RUN apt-get update && apt-get install -y python3 python3-pip
 USER developer
 ```
+
+> **Note**: The `:alpine` variant uses `apk add` instead of `apt-get`. Use `:latest` (Debian) if you need maximum compatibility with packages and binaries.
 
 Then update `docker-compose.yml`:
 
@@ -73,16 +76,20 @@ api.nuget.org
 
 ## Credentials
 
-The `docker-compose.yml` mounts two files from your host (read-only):
+The `docker-compose.yml` mounts two files from your host to a staging location:
 
-| File | Purpose |
-|------|---------|
-| `~/.claude/.credentials.json` | OAuth tokens for Anthropic API |
-| `~/.claude/settings.json` | Must contain `bypassPermissionsModeAccepted: true` |
+| File | Mounted To | Purpose |
+|------|------------|---------|
+| `~/.claude/.credentials.json` | `/tmp/claude-creds/` | OAuth tokens for Anthropic API |
+| `~/.claude/settings.json` | `/tmp/claude-creds/` | Must contain `bypassPermissionsModeAccepted: true` |
 
-Both files are mounted read-only to prevent the container from modifying your host configuration.
+The entrypoint script copies these to `/home/developer/.claude/` with correct ownership. This solves the UID mismatch between host and container users.
 
 **First-time setup**: Run `claude login` on your host machine before using the container.
+
+### devcontainer.json Settings
+
+The `devcontainer.json` includes `"remoteUser": "developer"` which ensures VS Code runs as the correct user with access to credentials. Do not remove this setting.
 
 ## Security Model
 

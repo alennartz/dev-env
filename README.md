@@ -4,10 +4,25 @@ A secure, network-isolated container for running Claude Code with `--dangerously
 
 ## Published Images
 
-| Image | Purpose |
-|-------|---------|
-| `ghcr.io/alennartz/claude-sandbox-proxy` | Squid proxy with SSL bump + iptables (minimal whitelist) |
-| `ghcr.io/alennartz/claude-sandbox-base` | Minimal sandbox: Claude Code + git + essentials (no sudo) |
+| Image | Size | Purpose |
+|-------|------|---------|
+| `ghcr.io/alennartz/claude-sandbox-proxy` | ~22MB | Squid proxy with SSL bump + iptables (minimal whitelist) |
+| `ghcr.io/alennartz/claude-sandbox-base:latest` | ~418MB | **Recommended.** Debian slim + Claude Code + git + essentials |
+| `ghcr.io/alennartz/claude-sandbox-base:alpine` | ~269MB | Alpine variant. Smaller but uses musl libc (see below) |
+
+### Choosing Between Debian and Alpine
+
+**Use `:latest` (Debian slim)** if you:
+- Plan to extend the image with additional tools
+- Need maximum compatibility with npm packages or binaries
+- Are unsure which to choose
+
+**Use `:alpine`** if you:
+- Want the smallest possible image
+- Only need Claude Code + git (no extensions)
+- Understand musl libc limitations
+
+> **Note**: Alpine uses musl libc instead of glibc. Some Node.js native modules and precompiled binaries may not work. Claude Code itself runs fine on both.
 
 ## Quick Start (For Your Project)
 
@@ -54,14 +69,17 @@ See [template/README.md](template/README.md) for customization options.
 
 ## Credentials
 
-The sandbox mounts two files from your host machine (both read-only):
+The sandbox mounts credentials from your host to a staging location (`/tmp/claude-creds/`). The entrypoint copies them to `/home/developer/.claude/` with correct ownership, solving the UID mismatch between host and container.
 
-| File | Purpose |
-|------|---------|
+| Host File | Purpose |
+|-----------|---------|
 | `~/.claude/.credentials.json` | OAuth tokens for Anthropic API |
 | `~/.claude/settings.json` | Contains `bypassPermissionsModeAccepted: true` |
 
-This avoids re-authentication on every container rebuild while preventing the sandbox from modifying your host configuration.
+This approach:
+- Keeps credentials read-only on the mount
+- Handles any host/container UID differences
+- Avoids re-authentication on every container rebuild
 
 ## Repository Structure
 
@@ -73,7 +91,8 @@ This avoids re-authentication on every container rebuild while preventing the sa
 │   │   ├── whitelist.txt      # Minimal: only .anthropic.com
 │   │   └── proxy-entrypoint.sh
 │   └── base/                  # Minimal sandbox
-│       ├── Dockerfile
+│       ├── Dockerfile         # Debian slim (default)
+│       ├── Dockerfile.alpine  # Alpine variant
 │       └── trust-proxy-ca.sh
 ├── template/                  # Copy to your project's .devcontainer/
 │   ├── devcontainer.json
