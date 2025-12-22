@@ -7,22 +7,7 @@ A secure, network-isolated container for running Claude Code with `--dangerously
 | Image | Size | Purpose |
 |-------|------|---------|
 | `ghcr.io/alennartz/claude-sandbox-proxy` | ~22MB | Squid proxy with SSL bump + iptables (minimal whitelist) |
-| `ghcr.io/alennartz/claude-sandbox-base:latest` | ~418MB | **Recommended.** Debian slim + Claude Code + git + essentials |
-| `ghcr.io/alennartz/claude-sandbox-base:alpine` | ~269MB | Alpine variant. Smaller but uses musl libc (see below) |
-
-### Choosing Between Debian and Alpine
-
-**Use `:latest` (Debian slim)** if you:
-- Plan to extend the image with additional tools
-- Need maximum compatibility with npm packages or binaries
-- Are unsure which to choose
-
-**Use `:alpine`** if you:
-- Want the smallest possible image
-- Only need Claude Code + git (no extensions)
-- Understand musl libc limitations
-
-> **Note**: Alpine uses musl libc instead of glibc. Some Node.js native modules and precompiled binaries may not work. Claude Code itself runs fine on both.
+| `ghcr.io/alennartz/claude-sandbox-base:latest` | ~418MB | Debian slim + Claude Code + git + essentials |
 
 ## Quick Start (For Your Project)
 
@@ -86,8 +71,7 @@ The sandbox mounts credentials directly from your host as read-only files:
 │   │   ├── whitelist.txt      # Minimal: only .anthropic.com
 │   │   └── proxy-entrypoint.sh
 │   └── base/                  # Minimal sandbox
-│       ├── Dockerfile         # Debian slim (default)
-│       ├── Dockerfile.alpine  # Alpine variant
+│       ├── Dockerfile         # Debian slim
 │       └── trust-proxy-ca.sh
 ├── template/                  # Copy to your project's .devcontainer/
 │   ├── devcontainer.json

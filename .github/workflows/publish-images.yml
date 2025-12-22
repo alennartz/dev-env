@@ -85,39 +85,3 @@ jobs:
           push: true
           tags: ${{ steps.meta-base.outputs.tags }}
           labels: ${{ steps.meta-base.outputs.labels }}
-
-  build-and-push-base-alpine:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Log in to Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract metadata for base (Alpine)
-        id: meta-base-alpine
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/claude-sandbox-base
-          tags: |
-            type=raw,value=alpine,enable={{is_default_branch}}
-            type=semver,pattern={{version}}-alpine
-            type=sha,prefix=,suffix=-alpine
-
-      - name: Build and push base image (Alpine)
-        uses: docker/build-push-action@v5
-        with:
-          context: ./images/base
-          file: ./images/base/Dockerfile.alpine
-          push: true
-          tags: ${{ steps.meta-base-alpine.outputs.tags }}
-          labels: ${{ steps.meta-base-alpine.outputs.labels }}

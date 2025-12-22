@@ -12,7 +12,7 @@ services:
       - ./whitelist.txt:/etc/squid/whitelist.txt:ro
 
   sandbox:
-    # Option 1: Use base image directly (or :alpine for smaller image)
+    # Option 1: Use base image directly
     image: ghcr.io/alennartz/claude-sandbox-base:latest
 
     # Option 2: Extend with your own Dockerfile

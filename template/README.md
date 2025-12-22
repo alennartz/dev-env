@@ -30,15 +30,12 @@ This template sets up a secure, sandboxed environment for running Claude Code wi
 Create a `Dockerfile` in your `.devcontainer/`:
 
 ```dockerfile
-# Use :latest (Debian) for apt-get, or :alpine for smaller image with apk
 FROM ghcr.io/alennartz/claude-sandbox-base:latest
 
 USER root
 RUN apt-get update && apt-get install -y python3 python3-pip
 USER developer
 ```
-
-> **Note**: The `:alpine` variant uses `apk add` instead of `apt-get`. Use `:latest` (Debian) if you need maximum compatibility with packages and binaries.
 
 Then update `docker-compose.yml`:
 

@@ -2,8 +2,6 @@
 # Trust the squid proxy CA certificate
 # This script runs as entrypoint wrapper in the sandbox container
 # Runs as root, installs CA, then drops privileges to developer user
-#
-# Compatible with both Debian (glibc) and Alpine (musl) images
 
 set -e
 
@@ -98,15 +96,7 @@ if [ "$(id -u)" = "0" ]; then
     # Use .profile for POSIX compatibility (works on both bash and sh)
     echo "export NODE_EXTRA_CA_CERTS=$CA_CERT" >> /home/$TARGET_USER/.profile
 
-    # Use gosu (Debian) or su-exec (Alpine) for privilege drop
-    if command -v gosu >/dev/null 2>&1; then
-        exec gosu "$TARGET_USER" "$@"
-    elif command -v su-exec >/dev/null 2>&1; then
-        exec su-exec "$TARGET_USER" "$@"
-    else
-        echo "ERROR: Neither gosu nor su-exec found for privilege drop"
-        exit 1
-    fi
+    exec gosu "$TARGET_USER" "$@"
 else
     exec "$@"
 fi

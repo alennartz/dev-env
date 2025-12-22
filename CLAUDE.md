@@ -23,9 +23,8 @@ dev-env/
 │   │   ├── whitelist.txt      # MINIMAL: only .anthropic.com
 │   │   └── proxy-entrypoint.sh
 │   └── base/
-│       ├── Dockerfile         # Debian slim (default, ~418MB)
-│       ├── Dockerfile.alpine  # Alpine variant (~269MB, musl libc)
-│       └── trust-proxy-ca.sh  # POSIX-compatible (works on both)
+│       ├── Dockerfile         # Debian slim (~418MB)
+│       └── trust-proxy-ca.sh
 ├── template/                  # Users copy this to their .devcontainer/
 │   ├── devcontainer.json
 │   ├── docker-compose.yml     # References GHCR images
@@ -49,21 +48,15 @@ dev-env/
 ### Published Images (images/)
 
 **`images/proxy/`** - Squid proxy container:
-- Alpine-based, minimal footprint
+- Minimal Alpine-based footprint
 - SSL bump for HTTPS inspection
 - iptables to redirect all traffic
 - Ships with MINIMAL whitelist (only `.anthropic.com`)
 
-**`images/base/`** - Minimal sandbox (two variants):
-
-| Variant | Base | Size | Use Case |
-|---------|------|------|----------|
-| `Dockerfile` (default) | node:22-slim (Debian) | ~418MB | Maximum compatibility |
-| `Dockerfile.alpine` | node:22-alpine | ~269MB | Smallest size |
-
-Both include: Claude Code, git, ripgrep, jq, non-root `developer` user with **NO SUDO**
-
-> **Alpine caveat**: Uses musl libc. Some npm native modules and precompiled binaries may fail. Use Debian if extending the image.
+**`images/base/`** - Minimal sandbox:
+- Based on `node:22-slim` (Debian)
+- Includes: Claude Code, git, ripgrep, jq
+- Non-root `developer` user with **NO SUDO**
 
 ### Template (template/)
 
@@ -83,21 +76,21 @@ Local files for this repo's development:
 
 - **Network isolation**: All traffic forced through proxy via iptables
 - **Domain whitelist**: Only explicitly allowed domains accessible
-- **Privilege drop**: Container starts as root to install CA cert, then permanently drops to `developer` user via gosu (Debian) or su-exec (Alpine)
+- **Privilege drop**: Container starts as root to install CA cert, then permanently drops to `developer` user via gosu
 - **No sudo**: sudo is not installed in base image; gosu only works if already root
 - **Capability separation**: Only proxy has NET_ADMIN
 - **Transparent**: No proxy env vars needed
 - **Read-only credentials**: Host auth files mounted read-only
 
-### Why gosu/su-exec instead of sudo?
+### Why gosu instead of sudo?
 
-The `trust-proxy-ca.sh` entrypoint needs root to install the proxy's CA certificate. We use `gosu` (Debian) or `su-exec` (Alpine) to drop privileges permanently after init:
+The `trust-proxy-ca.sh` entrypoint needs root to install the proxy's CA certificate. We use `gosu` to drop privileges permanently after init:
 
 ```
-root (PID 1) → trust-proxy-ca.sh → exec gosu/su-exec developer "$@" → developer (PID 1)
+root (PID 1) → trust-proxy-ca.sh → exec gosu developer "$@" → developer (PID 1)
 ```
 
-Unlike sudo, these tools cannot be used to regain root later - they require `setuid()` which only root can call. The entrypoint script auto-detects which tool is available. See `docs/security.md` for details.
+Unlike sudo, gosu cannot be used to regain root later - it requires `setuid()` which only root can call. See `docs/security.md` for details.
 
 ## Credentials and Permissions
 
@@ -171,9 +164,7 @@ docker compose -f .devcontainer/docker-compose.yml build proxy
 
 ### Updating published base images
 
-Edit `images/base/Dockerfile` (Debian) or `images/base/Dockerfile.alpine`, commit, push to main.
-
-Both images are built and published automatically via GitHub Actions.
+Edit `images/base/Dockerfile`, commit, push to main. The image is built and published automatically via GitHub Actions.
 
 ## Notes
 

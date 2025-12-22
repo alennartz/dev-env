@@ -1,4 +1,4 @@
-.PHONY: build-proxy build-base build-base-alpine build-all push test clean help
+.PHONY: build-proxy build-base build-all push test clean help
 
 # Registry and owner for pushing images
 REGISTRY ?= ghcr.io
@@ -14,8 +14,7 @@ help:
 	@echo "Local Development:"
 	@echo "  make build-all          Build all images locally"
 	@echo "  make build-proxy        Build proxy image"
-	@echo "  make build-base         Build base sandbox image (Debian slim)"
-	@echo "  make build-base-alpine  Build base sandbox image (Alpine)"
+	@echo "  make build-base         Build base sandbox image"
 	@echo "  make test               Test both images (API connectivity + auth)"
 	@echo "  make clean              Remove containers and images"
 	@echo ""
@@ -34,20 +33,15 @@ build-proxy:
 build-base:
 	docker build $(CACHE_FLAG) -t claude-sandbox-base:latest ./images/base
 
-build-base-alpine:
-	docker build $(CACHE_FLAG) -t claude-sandbox-base:alpine -f ./images/base/Dockerfile.alpine ./images/base
-
 # Build all images
-build-all: build-proxy build-base build-base-alpine
+build-all: build-proxy build-base
 
 # Push to GHCR (requires docker login)
 push: build-all
 	docker tag claude-sandbox-proxy:latest $(REGISTRY)/$(OWNER)/claude-sandbox-proxy:latest
 	docker tag claude-sandbox-base:latest $(REGISTRY)/$(OWNER)/claude-sandbox-base:latest
-	docker tag claude-sandbox-base:alpine $(REGISTRY)/$(OWNER)/claude-sandbox-base:alpine
 	docker push $(REGISTRY)/$(OWNER)/claude-sandbox-proxy:latest
 	docker push $(REGISTRY)/$(OWNER)/claude-sandbox-base:latest
-	docker push $(REGISTRY)/$(OWNER)/claude-sandbox-base:alpine
 
 # Test the setup using docker compose (uses .devcontainer/docker-compose.yml directly)
 test: build-all
@@ -70,5 +64,5 @@ test: build-all
 # Clean up
 clean:
 	docker compose -f .devcontainer/docker-compose.yml down -v 2>/dev/null || true
-	docker rmi claude-sandbox-proxy:latest claude-sandbox-base:latest claude-sandbox-base:alpine 2>/dev/null || true
+	docker rmi claude-sandbox-proxy:latest claude-sandbox-base:latest 2>/dev/null || true
 	@echo "Cleaned up containers and images"

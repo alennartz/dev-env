@@ -44,7 +44,7 @@ This sandbox is designed for running Claude Code with `--dangerously-skip-permis
 - Only proxy container can modify network rules
 - Compromised sandbox cannot disable filtering
 
-### Privilege Drop Pattern (gosu/su-exec)
+### Privilege Drop Pattern (gosu)
 
 The sandbox needs root privileges at startup to install the proxy's CA certificate into the system trust store. After that, it drops to an unprivileged user permanently.
 
@@ -58,32 +58,26 @@ Container starts as root
 │  - Run update-ca-certificates│
 └─────────────────────────────┘
         │
-        ▼  exec gosu/su-exec developer "$@"
+        ▼  exec gosu developer "$@"
 ┌─────────────────────────────┐
 │  Application (developer)    │
 │  PID 1, no way back to root │
 └─────────────────────────────┘
 ```
 
-**Why gosu/su-exec instead of sudo?**
+**Why gosu instead of sudo?**
 
-| Tool | Image | Stays installed? | Can regain root later? |
-|------|-------|------------------|------------------------|
-| sudo | - | Yes | Yes - any code can `sudo rm -rf /` |
-| gosu | Debian | Yes, but useless | No - requires already being root |
-| su-exec | Alpine | Yes, but useless | No - requires already being root |
+| Tool | Stays installed? | Can regain root later? |
+|------|------------------|------------------------|
+| sudo | Yes | Yes - any code can `sudo rm -rf /` |
+| gosu | Yes, but useless | No - requires already being root |
 
-Both `gosu` and `su-exec` use `setuid()`/`setgid()` syscalls which only root can call. Once you're running as an unprivileged user, neither tool can help you become root again:
+`gosu` uses `setuid()`/`setgid()` syscalls which only root can call. Once you're running as an unprivileged user, gosu cannot help you become root again:
 
 ```bash
-developer$ gosu root whoami      # Debian
+developer$ gosu root whoami
 gosu: cannot setuid: Operation not permitted
-
-developer$ su-exec root whoami   # Alpine
-su-exec: setuid: Operation not permitted
 ```
-
-The `trust-proxy-ca.sh` entrypoint auto-detects which tool is available and uses it.
 
 **What would an attacker need to escalate privileges?**
 
