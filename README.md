@@ -69,17 +69,12 @@ See [template/README.md](template/README.md) for customization options.
 
 ## Credentials
 
-The sandbox mounts credentials from your host to a staging location (`/tmp/claude-creds/`). The entrypoint copies them to `/home/developer/.claude/` with correct ownership, solving the UID mismatch between host and container.
+The sandbox mounts credentials directly from your host as read-only files:
 
-| Host File | Purpose |
-|-----------|---------|
-| `~/.claude/.credentials.json` | OAuth tokens for Anthropic API |
-| `~/.claude/settings.json` | Contains `bypassPermissionsModeAccepted: true` |
-
-This approach:
-- Keeps credentials read-only on the mount
-- Handles any host/container UID differences
-- Avoids re-authentication on every container rebuild
+| Host File | Mounted To | Purpose |
+|-----------|------------|---------|
+| `~/.claude/.credentials.json` | `/home/developer/.claude/.credentials.json:ro` | OAuth tokens for Anthropic API |
+| `~/.claude/settings.json` | `/home/developer/.claude/settings.json:ro` | Contains `bypassPermissionsModeAccepted: true` |
 
 ## Repository Structure
 

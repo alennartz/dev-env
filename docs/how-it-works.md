@@ -109,28 +109,16 @@ volumes:
 
 ## Credential Handling
 
-Host credentials (`~/.claude/.credentials.json` and `settings.json`) need special handling because:
-
-1. **Host files have restrictive permissions** (600, owner-only)
-2. **Host UID may not match container UID** (common: host is UID 1000, container `developer` is UID 1001)
-3. **Read-only mounts can't be chowned**
-
-The solution uses a **staging location**:
+Host credentials (`~/.claude/.credentials.json` and `settings.json`) are mounted directly as read-only files:
 
 ```yaml
 volumes:
-  # Mount to staging location (not directly to ~/.claude)
-  - ${HOME}/.claude/.credentials.json:/tmp/claude-creds/.credentials.json:ro
-  - ${HOME}/.claude/settings.json:/tmp/claude-creds/settings.json:ro
+  # Mount credentials directly (read-only)
+  - ${HOME}/.claude/.credentials.json:/home/developer/.claude/.credentials.json:ro
+  - ${HOME}/.claude/settings.json:/home/developer/.claude/settings.json:ro
 ```
 
-The entrypoint script (`trust-proxy-ca.sh`) then:
-1. Runs as root initially
-2. Copies credentials from `/tmp/claude-creds/` to `/home/developer/.claude/`
-3. Sets correct ownership (`chown developer:developer`)
-4. Drops privileges to `developer` user via `gosu` (Debian) or `su-exec` (Alpine)
-
-This ensures the `developer` user can read credentials regardless of host UID.
+The base image creates the `developer` user with UID 1000 (matching the common host UID), so credentials are readable without ownership changes.
 
 ## User Configuration
 

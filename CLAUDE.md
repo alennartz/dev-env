@@ -99,23 +99,42 @@ root (PID 1) → trust-proxy-ca.sh → exec gosu/su-exec developer "$@" → deve
 
 Unlike sudo, these tools cannot be used to regain root later - they require `setuid()` which only root can call. The entrypoint script auto-detects which tool is available. See `docs/security.md` for details.
 
-## Credentials
+## Credentials and Permissions
 
-Credentials are mounted to a **staging location** (`/tmp/claude-creds/`) then copied by the entrypoint with correct ownership. This solves the UID mismatch between host users and the container's `developer` user.
+The host's `~/.claude/` directory is mounted read-only and synced to a writable location at container startup:
 
-| Host File | Mounted To | Purpose |
-|-----------|------------|---------|
-| `~/.claude/.credentials.json` | `/tmp/claude-creds/` | OAuth tokens for Anthropic API |
-| `~/.claude/settings.json` | `/tmp/claude-creds/` | Must contain `bypassPermissionsModeAccepted: true` |
+| Host | Container (staging) | Container (runtime) |
+|------|---------------------|---------------------|
+| `~/.claude/` | `/home/developer/.claude-host:ro` | `/home/developer/.claude/` |
 
-The entrypoint (`trust-proxy-ca.sh`) copies these to `/home/developer/.claude/` and runs `chown` before dropping privileges.
+The entrypoint script:
+1. Copies host credentials from the read-only mount to a writable location
+2. Creates container-specific settings with `defaultMode: bypassPermissions`
+3. Sets up trust entries for the workspace path
 
-**Setup**: Users must run `claude login` on host, then set:
+**Setup**: Users must run `claude login` on host first:
 ```bash
-echo '{"bypassPermissionsModeAccepted": true}' > ~/.claude/settings.json
+claude login
 ```
 
-This enables `--dangerously-skip-permissions` without interactive prompts.
+### Bypass Permissions Mode
+
+The Docker images have bypass permissions mode **baked in** at build time. This:
+- Skips the "Do you trust this folder?" prompt
+- Allows tool execution without per-tool approval
+- Is the recommended approach for sandboxed container environments
+
+The setting in `~/.claude/settings.json`:
+```json
+{
+  "bypassPermissionsModeAccepted": true,
+  "permissions": {
+    "defaultMode": "bypassPermissions"
+  }
+}
+```
+
+The entrypoint copies only credentials from the host mount, preserving the baked-in settings.
 
 **Important**: The `devcontainer.json` must include `"remoteUser": "developer"` so VS Code sessions run as the correct user.
 

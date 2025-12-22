@@ -52,11 +52,12 @@ services:
         condition: service_healthy
     environment:
       - NODE_EXTRA_CA_CERTS=/etc/squid/ssl/squid-ca-cert.pem
+      - WORKSPACE_FOLDER=${LOCAL_WORKSPACE_FOLDER_BASENAME:-project}
     volumes:
       - squid-ssl:/etc/squid/ssl:ro
-      # Mount credentials to staging location (entrypoint copies with correct ownership)
-      - ${HOME}/.claude/.credentials.json:/tmp/claude-creds/.credentials.json:ro
-      - ${HOME}/.claude/settings.json:/tmp/claude-creds/settings.json:ro
+      - ..:/workspaces/${LOCAL_WORKSPACE_FOLDER_BASENAME:-project}:cached
+      # Mount host Claude config (read-only, copied to writable location at startup)
+      - ${HOME}/.claude:/home/developer/.claude-host:ro
     entrypoint: ["/bin/sh", "/usr/local/bin/trust-proxy-ca.sh"]
     command: ["sleep", "infinity"]
 
@@ -71,17 +72,29 @@ volumes:
 3. Select "Dev Containers: Reopen in Container"
 4. Wait for containers to build (first time takes a few minutes)
 
-## Run Claude Code
+## Setup Credentials (One-Time)
 
-Once inside the container:
+Before using the sandbox, authenticate Claude Code on your **host machine**:
 
 ```bash
-# First time: authenticate
+# On your host (not in the container)
 claude login
-
-# Run Claude Code with full permissions (safe in sandbox)
-claude --dangerously-skip-permissions
 ```
+
+Your credentials at `~/.claude/` are automatically synced into the container at startup.
+
+## Run Claude Code
+
+Once inside the container, just run:
+
+```bash
+claude
+```
+
+The container is pre-configured to run in bypass permissions mode, so you don't need the `--dangerously-skip-permissions` flag. This is safe because:
+- The sandbox network restricts access to whitelisted domains only
+- Your host credentials are mounted read-only
+- The container runs as a non-root user
 
 ## What You Get
 

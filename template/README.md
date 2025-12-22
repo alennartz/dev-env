@@ -76,14 +76,12 @@ api.nuget.org
 
 ## Credentials
 
-The `docker-compose.yml` mounts two files from your host to a staging location:
+The `docker-compose.yml` mounts two credential files directly from your host as read-only:
 
 | File | Mounted To | Purpose |
 |------|------------|---------|
-| `~/.claude/.credentials.json` | `/tmp/claude-creds/` | OAuth tokens for Anthropic API |
-| `~/.claude/settings.json` | `/tmp/claude-creds/` | Must contain `bypassPermissionsModeAccepted: true` |
-
-The entrypoint script copies these to `/home/developer/.claude/` with correct ownership. This solves the UID mismatch between host and container users.
+| `~/.claude/.credentials.json` | `/home/developer/.claude/.credentials.json:ro` | OAuth tokens for Anthropic API |
+| `~/.claude/settings.json` | `/home/developer/.claude/settings.json:ro` | Must contain `bypassPermissionsModeAccepted: true` |
 
 **First-time setup**: Run `claude login` on your host machine before using the container.
 
