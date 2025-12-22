@@ -106,3 +106,28 @@ volumes:
 - Proxy writes CA cert to volume
 - Sandbox reads CA cert from volume (read-only)
 - Certificate persists across container restarts
+
+## Credential Handling
+
+Host credentials (`~/.claude/.credentials.json` and `settings.json`) are mounted directly as read-only files:
+
+```yaml
+volumes:
+  # Mount credentials directly (read-only)
+  - ${HOME}/.claude/.credentials.json:/home/developer/.claude/.credentials.json:ro
+  - ${HOME}/.claude/settings.json:/home/developer/.claude/settings.json:ro
+```
+
+The base image creates the `developer` user with UID 1000 (matching the common host UID), so credentials are readable without ownership changes.
+
+## User Configuration
+
+For VS Code Dev Containers, set `remoteUser` in `devcontainer.json`:
+
+```json
+{
+  "remoteUser": "developer"
+}
+```
+
+This ensures VS Code sessions run as `developer`, not root. Without this, you'd need to manually specify `-u developer` for `docker exec` commands.

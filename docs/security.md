@@ -37,12 +37,55 @@ This sandbox is designed for running Claude Code with `--dangerously-skip-permis
 
 - Cannot modify iptables rules
 - Cannot access host network
-- Cannot escalate privileges beyond `developer` user with sudo
+- Cannot escalate privileges (no sudo, explained below)
 
 ✅ **NET_ADMIN isolated to proxy**
 
 - Only proxy container can modify network rules
 - Compromised sandbox cannot disable filtering
+
+### Privilege Drop Pattern (gosu)
+
+The sandbox needs root privileges at startup to install the proxy's CA certificate into the system trust store. After that, it drops to an unprivileged user permanently.
+
+```text
+Container starts as root
+        │
+        ▼
+┌─────────────────────────────┐
+│  trust-proxy-ca.sh (root)   │
+│  - Install CA certificate   │
+│  - Run update-ca-certificates│
+└─────────────────────────────┘
+        │
+        ▼  exec gosu developer "$@"
+┌─────────────────────────────┐
+│  Application (developer)    │
+│  PID 1, no way back to root │
+└─────────────────────────────┘
+```
+
+**Why gosu instead of sudo?**
+
+| Tool | Stays installed? | Can regain root later? |
+|------|------------------|------------------------|
+| sudo | Yes | Yes - any code can `sudo rm -rf /` |
+| gosu | Yes, but useless | No - requires already being root |
+
+`gosu` uses `setuid()`/`setgid()` syscalls which only root can call. Once you're running as an unprivileged user, gosu cannot help you become root again:
+
+```bash
+developer$ gosu root whoami
+gosu: cannot setuid: Operation not permitted
+```
+
+**What would an attacker need to escalate privileges?**
+
+- ✗ `sudo` - not installed
+- ✗ `su` - requires root password (none set)
+- ✗ `gosu`/`su-exec` - only works if already root
+- ✗ setuid binaries - none present
+- ✗ Kernel exploit - only remaining option (container escape)
 
 ## What's NOT Protected
 

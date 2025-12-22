@@ -4,10 +4,10 @@ A secure, network-isolated container for running Claude Code with `--dangerously
 
 ## Published Images
 
-| Image | Purpose |
-|-------|---------|
-| `ghcr.io/OWNER/claude-sandbox-proxy` | Squid proxy with SSL bump + iptables (minimal whitelist) |
-| `ghcr.io/OWNER/claude-sandbox-base` | Minimal sandbox: Claude Code + git + essentials (no sudo) |
+| Image | Size | Purpose |
+|-------|------|---------|
+| `ghcr.io/alennartz/claude-sandbox-proxy` | ~22MB | Squid proxy with SSL bump + iptables (minimal whitelist) |
+| `ghcr.io/alennartz/claude-sandbox-base:latest` | ~418MB | Debian slim + Claude Code + git + essentials |
 
 ## Quick Start (For Your Project)
 
@@ -16,10 +16,7 @@ A secure, network-isolated container for running Claude Code with `--dangerously
    cp -r template/ your-project/.devcontainer/
    ```
 
-2. **Update image references** in `docker-compose.yml`:
-   - Replace `OWNER` with the GitHub username/org
-
-3. **Configure credentials** (one-time setup on host):
+2. **Configure credentials** (one-time setup on host):
    ```bash
    # Login to Claude (if not already)
    claude login
@@ -28,11 +25,11 @@ A secure, network-isolated container for running Claude Code with `--dangerously
    echo '{"bypassPermissionsModeAccepted": true}' > ~/.claude/settings.json
    ```
 
-4. **Customize `whitelist.txt`** with domains your project needs
+3. **Customize `whitelist.txt`** with domains your project needs
 
-5. **Open in VS Code** → "Reopen in Container"
+4. **Open in VS Code** → "Reopen in Container"
 
-6. **Run Claude Code**:
+5. **Run Claude Code**:
    ```bash
    claude --dangerously-skip-permissions
    ```
@@ -57,14 +54,12 @@ See [template/README.md](template/README.md) for customization options.
 
 ## Credentials
 
-The sandbox mounts two files from your host machine (both read-only):
+The sandbox mounts credentials directly from your host as read-only files:
 
-| File | Purpose |
-|------|---------|
-| `~/.claude/.credentials.json` | OAuth tokens for Anthropic API |
-| `~/.claude/settings.json` | Contains `bypassPermissionsModeAccepted: true` |
-
-This avoids re-authentication on every container rebuild while preventing the sandbox from modifying your host configuration.
+| Host File | Mounted To | Purpose |
+|-----------|------------|---------|
+| `~/.claude/.credentials.json` | `/home/developer/.claude/.credentials.json:ro` | OAuth tokens for Anthropic API |
+| `~/.claude/settings.json` | `/home/developer/.claude/settings.json:ro` | Contains `bypassPermissionsModeAccepted: true` |
 
 ## Repository Structure
 
@@ -76,7 +71,7 @@ This avoids re-authentication on every container rebuild while preventing the sa
 │   │   ├── whitelist.txt      # Minimal: only .anthropic.com
 │   │   └── proxy-entrypoint.sh
 │   └── base/                  # Minimal sandbox
-│       ├── Dockerfile
+│       ├── Dockerfile         # Debian slim
 │       └── trust-proxy-ca.sh
 ├── template/                  # Copy to your project's .devcontainer/
 │   ├── devcontainer.json

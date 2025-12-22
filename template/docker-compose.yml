@@ -3,7 +3,7 @@
 
 services:
   proxy:
-    image: ghcr.io/OWNER/claude-sandbox-proxy:latest
+    image: ghcr.io/alennartz/claude-sandbox-proxy:latest
     cap_add:
       - NET_ADMIN
     volumes:
@@ -13,7 +13,7 @@ services:
 
   sandbox:
     # Option 1: Use base image directly
-    image: ghcr.io/OWNER/claude-sandbox-base:latest
+    image: ghcr.io/alennartz/claude-sandbox-base:latest
 
     # Option 2: Extend with your own Dockerfile
     # build:
@@ -26,13 +26,13 @@ services:
         condition: service_healthy
     environment:
       - NODE_EXTRA_CA_CERTS=/etc/squid/ssl/squid-ca-cert.pem
+      - WORKSPACE_FOLDER=${LOCAL_WORKSPACE_FOLDER_BASENAME:-project}
     volumes:
       - squid-ssl:/etc/squid/ssl:ro
       - ..:/workspaces/${LOCAL_WORKSPACE_FOLDER_BASENAME:-project}:cached
-      # Mount Claude credentials from host (required for authentication)
-      - ${HOME}/.claude/.credentials.json:/home/developer/.claude/.credentials.json:ro
-      - ${HOME}/.claude/settings.json:/home/developer/.claude/settings.json:ro
-    entrypoint: ["/bin/bash", "/usr/local/bin/trust-proxy-ca.sh"]
+      # Mount host Claude credentials (read-only) - entrypoint copies to writable location
+      - ${HOME}/.claude:/home/developer/.claude-host:ro
+    entrypoint: ["/bin/sh", "/usr/local/bin/trust-proxy-ca.sh"]
     command: ["sleep", "infinity"]
 
 volumes:

@@ -8,7 +8,7 @@ The repo is organized into three main areas:
 
 - **`images/`** - Published to GHCR (reusable by other repos)
 - **`template/`** - Files users copy to their project's `.devcontainer/`
-- **`local/`** - Personal full dev environment (not published)
+- **`local/`** - Extended whitelist and launch script (not published)
 
 The `.devcontainer/` folder is minimal and references the local builds.
 
@@ -23,16 +23,16 @@ dev-env/
 │   │   ├── whitelist.txt      # MINIMAL: only .anthropic.com
 │   │   └── proxy-entrypoint.sh
 │   └── base/
-│       ├── Dockerfile         # Minimal sandbox (Claude + git only)
+│       ├── Dockerfile         # Debian slim (~418MB)
 │       └── trust-proxy-ca.sh
 ├── template/                  # Users copy this to their .devcontainer/
 │   ├── devcontainer.json
 │   ├── docker-compose.yml     # References GHCR images
 │   ├── whitelist.txt          # Example with common domains
 │   └── README.md
-├── local/                     # Personal dev environment (not published)
-│   ├── Dockerfile             # Full sandbox with many runtimes
-│   └── whitelist.txt          # Extended whitelist for this repo
+├── local/                     # Extended whitelist and launch script
+│   ├── whitelist.txt          # Extended whitelist for this repo
+│   └── claude-sandbox.sh      # Launch helper script
 ├── .devcontainer/             # Uses local builds
 │   ├── devcontainer.json
 │   └── docker-compose.yml
@@ -48,15 +48,14 @@ dev-env/
 ### Published Images (images/)
 
 **`images/proxy/`** - Squid proxy container:
-- Alpine-based, minimal footprint
+- Minimal Alpine-based footprint
 - SSL bump for HTTPS inspection
 - iptables to redirect all traffic
 - Ships with MINIMAL whitelist (only `.anthropic.com`)
 
 **`images/base/`** - Minimal sandbox:
-- Debian Bookworm slim
-- Node.js (for Claude Code)
-- Claude Code, git, ripgrep, jq
+- Based on `node:22-slim` (Debian)
+- Includes: Claude Code, git, ripgrep, jq
 - Non-root `developer` user with **NO SUDO**
 
 ### Template (template/)
@@ -68,36 +67,69 @@ Files for users to copy to their project's `.devcontainer/`:
 
 ### Local Development (local/)
 
-Personal opinionated dev environment with:
-- Python, .NET, Go, Rust runtimes
-- Build tools, debuggers
-- Extended whitelist
+Local files for this repo's development:
+- `whitelist.txt` - Extended domain whitelist for development
+- `claude-sandbox.sh` - Script to launch Claude in the sandbox
 - **Not published** - for this repo only
 
 ## Security Model
 
 - **Network isolation**: All traffic forced through proxy via iptables
 - **Domain whitelist**: Only explicitly allowed domains accessible
-- **No sudo**: Claude runs as unprivileged `developer` user
+- **Privilege drop**: Container starts as root to install CA cert, then permanently drops to `developer` user via gosu
+- **No sudo**: sudo is not installed in base image; gosu only works if already root
 - **Capability separation**: Only proxy has NET_ADMIN
 - **Transparent**: No proxy env vars needed
 - **Read-only credentials**: Host auth files mounted read-only
 
-## Credentials
+### Why gosu instead of sudo?
 
-The sandbox mounts two files from the host (both read-only):
+The `trust-proxy-ca.sh` entrypoint needs root to install the proxy's CA certificate. We use `gosu` to drop privileges permanently after init:
 
-| File | Purpose |
-|------|---------|
-| `~/.claude/.credentials.json` | OAuth tokens for Anthropic API |
-| `~/.claude/settings.json` | Must contain `bypassPermissionsModeAccepted: true` |
-
-**Setup**: Users must run `claude login` on host, then set:
-```bash
-echo '{"bypassPermissionsModeAccepted": true}' > ~/.claude/settings.json
+```
+root (PID 1) → trust-proxy-ca.sh → exec gosu developer "$@" → developer (PID 1)
 ```
 
-This enables `--dangerously-skip-permissions` without interactive prompts.
+Unlike sudo, gosu cannot be used to regain root later - it requires `setuid()` which only root can call. See `docs/security.md` for details.
+
+## Credentials and Permissions
+
+The host's `~/.claude/` directory is mounted read-only and synced to a writable location at container startup:
+
+| Host | Container (staging) | Container (runtime) |
+|------|---------------------|---------------------|
+| `~/.claude/` | `/home/developer/.claude-host:ro` | `/home/developer/.claude/` |
+
+The entrypoint script:
+1. Copies host credentials from the read-only mount to a writable location
+2. Creates container-specific settings with `defaultMode: bypassPermissions`
+3. Sets up trust entries for the workspace path
+
+**Setup**: Users must run `claude login` on host first:
+```bash
+claude login
+```
+
+### Bypass Permissions Mode
+
+The Docker images have bypass permissions mode **baked in** at build time. This:
+- Skips the "Do you trust this folder?" prompt
+- Allows tool execution without per-tool approval
+- Is the recommended approach for sandboxed container environments
+
+The setting in `~/.claude/settings.json`:
+```json
+{
+  "bypassPermissionsModeAccepted": true,
+  "permissions": {
+    "defaultMode": "bypassPermissions"
+  }
+}
+```
+
+The entrypoint copies only credentials from the host mount, preserving the baked-in settings.
+
+**Important**: The `devcontainer.json` must include `"remoteUser": "developer"` so VS Code sessions run as the correct user.
 
 ## Development Workflow
 
@@ -107,7 +139,6 @@ This enables `--dangerously-skip-permissions` without interactive prompts.
 make build-all     # Build all images
 make build-proxy   # Build proxy only
 make build-base    # Build base sandbox only
-make build-local   # Build full local sandbox
 make test          # Test the setup
 make clean         # Clean up
 ```
@@ -131,16 +162,9 @@ Edit `local/whitelist.txt`, then rebuild:
 docker compose -f .devcontainer/docker-compose.yml build proxy
 ```
 
-### Adding a tool to local sandbox
+### Updating published base images
 
-Edit `local/Dockerfile`, then rebuild:
-```bash
-docker compose -f .devcontainer/docker-compose.yml build sandbox
-```
-
-### Updating published base image
-
-Edit `images/base/Dockerfile`, commit, push to main.
+Edit `images/base/Dockerfile`, commit, push to main. The image is built and published automatically via GitHub Actions.
 
 ## Notes
 

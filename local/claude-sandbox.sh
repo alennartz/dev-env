@@ -7,6 +7,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 COMPOSE_FILE="$REPO_ROOT/.devcontainer/docker-compose.yml"
+WORKSPACE_NAME=$(basename "$REPO_ROOT")
 
 # Colors for output
 RED='\033[0;31m'
@@ -39,7 +40,6 @@ start_containers() {
         log "Starting containers..."
 
         # Generate .env file for compose
-        WORKSPACE_NAME=$(basename "$REPO_ROOT")
         echo "LOCAL_WORKSPACE_FOLDER_BASENAME=$WORKSPACE_NAME" > "$REPO_ROOT/.devcontainer/.env"
 
         docker compose -f "$COMPOSE_FILE" up -d
@@ -60,4 +60,4 @@ start_containers() {
 start_containers
 
 log "Launching Claude Code in sandbox..."
-docker compose -f "$COMPOSE_FILE" exec -it sandbox bash -c 'claude --dangerously-skip-permissions'
+docker compose -f "$COMPOSE_FILE" exec -u developer -w "/workspaces/$WORKSPACE_NAME" -it sandbox claude --dangerously-skip-permissions

@@ -3,5 +3,6 @@
   "dockerComposeFile": "docker-compose.yml",
   "service": "sandbox",
   "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
+  "remoteUser": "developer",
   "initializeCommand": "echo 'LOCAL_WORKSPACE_FOLDER_BASENAME=${localWorkspaceFolderBasename}' > ${localWorkspaceFolder}/.devcontainer/.env"
 }
