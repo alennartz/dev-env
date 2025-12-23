@@ -34,10 +34,10 @@ ls -la /etc/squid/ssl/
 docker compose -f .devcontainer/docker-compose.yml logs proxy
 ```
 
-3. Manually run the trust script:
+3. The CA trust script runs automatically as the container entrypoint. If it failed, restart the container:
 
 ```bash
-sudo /usr/local/bin/trust-proxy-ca.sh
+docker compose -f .devcontainer/docker-compose.yml restart sandbox
 ```
 
 4. For Node.js specifically, ensure the env var is set:
@@ -120,9 +120,11 @@ If `git clone` fails:
 # Check if github.com is accessible
 curl -v https://github.com
 
-# Git may need explicit proxy config
-git config --global http.proxy http://localhost:3128
+# Check if github.com is in your whitelist
+cat /etc/squid/whitelist.txt | grep github
 ```
+
+Traffic is transparently intercepted via iptables, so explicit proxy config should not be needed.
 
 ### npm
 

@@ -68,7 +68,13 @@ services:
 
 ## Persistent Data
 
-By default, only the workspace is persistent. To persist other data:
+By default, the following data persists across container restarts:
+
+- **Workspace**: Your project files are mounted from the host
+- **Claude config**: `~/.claude/` and `~/.claude.json` are mounted from your host
+- **SSL certificates**: Stored in the `squid-ssl` Docker volume
+
+To persist additional data (e.g., npm cache), add named volumes:
 
 ```yaml
 # .devcontainer/docker-compose.yml
@@ -76,12 +82,11 @@ services:
   sandbox:
     # ... other config ...
     volumes:
-      - squid-ssl:/etc/squid/ssl:ro
-      - claude-data:/home/developer/.claude  # Persist Claude config
+      - npm-cache:/home/developer/.npm
 
 volumes:
   squid-ssl:
-  claude-data:
+  npm-cache:
 ```
 
 ## Custom Sandbox Image
