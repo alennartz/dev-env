@@ -4,11 +4,12 @@ This repository provides a secure, sandboxed Docker development container for ru
 
 ## Repository Organization
 
-The repo is organized into three main areas:
+The repo is organized into these main areas:
 
+- **`claude-sandbox.sh`** - Launch script to sandbox Claude in any repository
 - **`images/`** - Published to GHCR (reusable by other repos)
 - **`template/`** - Files users copy to their project's `.devcontainer/`
-- **`local/`** - Extended whitelist and launch script (not published)
+- **`local/`** - Extended whitelist for this repo's development
 
 The `.devcontainer/` folder is minimal and references the local builds.
 
@@ -16,6 +17,7 @@ The `.devcontainer/` folder is minimal and references the local builds.
 
 ```text
 dev-env/
+├── claude-sandbox.sh          # Launch script - sandbox Claude in any repo
 ├── images/                    # Published to GHCR
 │   ├── proxy/
 │   │   ├── Dockerfile         # Squid proxy with SSL bump
@@ -30,9 +32,8 @@ dev-env/
 │   ├── docker-compose.yml     # References GHCR images
 │   ├── whitelist.txt          # Example with common domains
 │   └── README.md
-├── local/                     # Extended whitelist and launch script
-│   ├── whitelist.txt          # Extended whitelist for this repo
-│   └── claude-sandbox.sh      # Launch helper script
+├── local/                     # Local development files
+│   └── whitelist.txt          # Extended whitelist for this repo
 ├── .devcontainer/             # Uses local builds
 │   ├── devcontainer.json
 │   └── docker-compose.yml
@@ -55,8 +56,9 @@ dev-env/
 
 **`images/base/`** - Minimal sandbox:
 - Based on `node:22-slim` (Debian)
-- Includes: Claude Code, git, ripgrep, jq
+- Includes: git, ripgrep, jq, gosu (Claude Code mounted from host)
 - Non-root `developer` user with **NO SUDO**
+- PATH includes `~/.local/bin` for mounted Claude binary
 
 ### Template (template/)
 
@@ -65,12 +67,27 @@ Files for users to copy to their project's `.devcontainer/`:
 - Includes example whitelist with common domains
 - Users customize by editing `whitelist.txt` or extending base image
 
+### Sandbox Script (claude-sandbox.sh)
+
+The recommended way to sandbox Claude for any repository. Run from any project directory:
+
+```bash
+/path/to/dev-env/claude-sandbox.sh              # Current directory
+/path/to/dev-env/claude-sandbox.sh --repo PATH  # Specific repo
+/path/to/dev-env/claude-sandbox.sh --status     # Check status
+/path/to/dev-env/claude-sandbox.sh --stop       # Stop containers
+```
+
+The script automatically:
+- Detects local `.devcontainer/` setups and uses them if present
+- Falls back to locally-built images, then GHCR images
+- Resolves whitelists from target repo → `local/whitelist.txt` → image default
+- Generates docker-compose files on the fly for repos without `.devcontainer/`
+
 ### Local Development (local/)
 
-Local files for this repo's development:
-- `whitelist.txt` - Extended domain whitelist for development
-- `claude-sandbox.sh` - Script to launch Claude in the sandbox
-- **Not published** - for this repo only
+Files for this repo's development (not published):
+- `whitelist.txt` - Extended domain whitelist
 
 ## Security Model
 
@@ -80,7 +97,7 @@ Local files for this repo's development:
 - **No sudo**: sudo is not installed in base image; gosu only works if already root
 - **Capability separation**: Only proxy has NET_ADMIN
 - **Transparent**: No proxy env vars needed
-- **Read-only credentials**: Host auth files mounted read-only
+- **Direct mounts**: Host Claude binary (RO) and config (RW) mounted directly
 
 ### Why gosu instead of sudo?
 
@@ -94,30 +111,32 @@ Unlike sudo, gosu cannot be used to regain root later - it requires `setuid()` w
 
 ## Credentials and Permissions
 
-The host's `~/.claude/` directory is mounted read-only and synced to a writable location at container startup:
+The host's Claude installation and git config are mounted directly into the container:
 
-| Host | Container (staging) | Container (runtime) |
-|------|---------------------|---------------------|
-| `~/.claude/` | `/home/developer/.claude-host:ro` | `/home/developer/.claude/` |
+| Host | Container | Mode |
+|------|-----------|------|
+| `~/.local/share/claude/` | `/home/developer/.local/share/claude/` | RO |
+| `~/.claude/` | `/home/developer/.claude/` | RW |
+| `~/.claude.json` | `/home/developer/.claude.json` | RW |
+| `~/.gitconfig` | `/home/developer/.gitconfig` | RO |
+| `~/.git-credentials` | `/home/developer/.git-credentials` | RO |
 
 The entrypoint script:
-1. Copies host credentials from the read-only mount to a writable location
-2. Creates container-specific settings with `defaultMode: bypassPermissions`
-3. Sets up trust entries for the workspace path
+1. Installs the proxy CA certificate for HTTPS inspection
+2. Creates a symlink from `~/.local/bin/claude` to the latest version in the mounted versions directory
+3. Drops privileges to the `developer` user
 
-**Setup**: Users must run `claude login` on host first:
-```bash
-claude login
-```
+**Setup**: Users must:
+1. Install Claude Code natively on host: `curl -fsSL https://claude.ai/install.sh | sh`
+2. Run `claude login` on host
+3. Create `~/.claude.json` if missing: `touch ~/.claude.json`
+4. Ensure git is configured: `git config --global user.name` and `git config --global user.email`
+5. (Optional) For HTTPS credentials: `touch ~/.git-credentials` and configure `git config --global credential.helper store`
 
 ### Bypass Permissions Mode
 
-The Docker images have bypass permissions mode **baked in** at build time. This:
-- Skips the "Do you trust this folder?" prompt
-- Allows tool execution without per-tool approval
-- Is the recommended approach for sandboxed container environments
+Host settings are used directly (not overridden by the container). To enable bypass mode, add to your host's `~/.claude/settings.json`:
 
-The setting in `~/.claude/settings.json`:
 ```json
 {
   "bypassPermissionsModeAccepted": true,
@@ -126,8 +145,6 @@ The setting in `~/.claude/settings.json`:
   }
 }
 ```
-
-The entrypoint copies only credentials from the host mount, preserving the baked-in settings.
 
 **Important**: The `devcontainer.json` must include `"remoteUser": "developer"` so VS Code sessions run as the correct user.
 
@@ -172,3 +189,4 @@ Edit `images/base/Dockerfile`, commit, push to main. The image is built and publ
 - Sandbox trusts proxy's CA via `trust-proxy-ca.sh` entrypoint
 - Tools with certificate pinning may fail (rare)
 - DNS is allowed; filtering happens at HTTP/HTTPS layer
+- Auto-updates are disabled in the container; update Claude on your host to get new versions

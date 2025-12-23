@@ -2,6 +2,8 @@
 
 This template sets up a secure, sandboxed environment for running Claude Code with `--dangerously-skip-permissions`.
 
+> **Tip**: For a quicker approach that doesn't require copying files, use the `claude-sandbox.sh` script from the [dev-env repo](https://github.com/alennartz/dev-env). It can sandbox any project without modifying it.
+
 ## Quick Start
 
 1. **Copy this folder** to your project's `.devcontainer/` directory

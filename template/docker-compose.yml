@@ -30,10 +30,22 @@ services:
     volumes:
       - squid-ssl:/etc/squid/ssl:ro
       - ..:/workspaces/${LOCAL_WORKSPACE_FOLDER_BASENAME:-project}:cached
-      # Mount host Claude credentials (read-only) - entrypoint copies to writable location
-      - ${HOME}/.claude:/home/developer/.claude-host:ro
+      # Mount Claude binary directory (entrypoint creates symlink in ~/.local/bin)
+      - ${HOME}/.local/share/claude:/home/developer/.local/share/claude:ro
+      # Mount Claude config directly (RW)
+      - ${HOME}/.claude:/home/developer/.claude:cached
+      - ${HOME}/.claude.json:/home/developer/.claude.json:cached
+      # Mount git config for commits
+      - ${HOME}/.gitconfig:/home/developer/.gitconfig:ro
+      - ${HOME}/.git-credentials:/home/developer/.git-credentials:ro
     entrypoint: ["/bin/sh", "/usr/local/bin/trust-proxy-ca.sh"]
     command: ["sleep", "infinity"]
+    healthcheck:
+      test: ["CMD", "test", "-x", "/home/developer/.local/bin/claude"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+      start_period: 5s
 
 volumes:
   squid-ssl:
