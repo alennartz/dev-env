@@ -19,13 +19,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN userdel -r node && useradd -m -s /bin/bash -u 1000 developer
 
 # ============================================
-# CLAUDE CODE
-# ============================================
-RUN npm install -g @anthropic-ai/claude-code && \
-    npm cache clean --force && \
-    rm -rf /root/.npm
-
-# ============================================
 # PROXY CA TRUST SCRIPT
 # ============================================
 COPY trust-proxy-ca.sh /usr/local/bin/
@@ -41,11 +34,13 @@ WORKDIR /home/developer
 # Set SHELL env var (required for Claude Code shell mode)
 ENV SHELL=/bin/bash
 
-# Create .claude directory and bake in settings for bypass permissions mode
-# (credentials are mounted at runtime from host)
-RUN mkdir -p /home/developer/.claude && \
-    echo '{"bypassPermissionsModeAccepted":true,"permissions":{"defaultMode":"bypassPermissions"},"env":{"DISABLE_AUTOUPDATER":"1"}}' \
-    > /home/developer/.claude/settings.json && \
-    chown -R developer:developer /home/developer/.claude
+# Add ~/.local/bin to PATH for mounted Claude binary
+ENV PATH="/home/developer/.local/bin:${PATH}"
+
+# Create mount point directories for Claude (binary and config mounted from host)
+RUN mkdir -p /home/developer/.local/bin \
+             /home/developer/.local/share/claude \
+             /home/developer/.claude && \
+    chown -R developer:developer /home/developer/.local /home/developer/.claude
 
 CMD ["/bin/bash"]

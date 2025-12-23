@@ -9,7 +9,37 @@ A secure, network-isolated container for running Claude Code with `--dangerously
 | `ghcr.io/alennartz/claude-sandbox-proxy` | ~22MB | Squid proxy with SSL bump + iptables (minimal whitelist) |
 | `ghcr.io/alennartz/claude-sandbox-base:latest` | ~418MB | Debian slim + Claude Code + git + essentials |
 
-## Quick Start (For Your Project)
+## Quick Start
+
+### Option 1: Use the Sandbox Script (Recommended)
+
+The easiest way to sandbox Claude for any repository:
+
+1. **Clone this repo** (one-time):
+   ```bash
+   git clone https://github.com/alennartz/dev-env.git ~/dev-env
+   ```
+
+2. **Set up an alias** (add to your `~/.bashrc` or `~/.zshrc`):
+   ```bash
+   alias claude-sandbox='~/dev-env/claude-sandbox.sh'
+   ```
+
+3. **Run Claude in any project**:
+   ```bash
+   cd ~/your-project
+   claude-sandbox
+   ```
+
+The script automatically:
+- Detects and uses local `.devcontainer/` setups if present
+- Falls back to GHCR images if no local setup exists
+- Resolves whitelists from target repo, this repo, or image defaults
+- Manages container lifecycle (start, stop, status)
+
+### Option 2: Copy Template to Your Project
+
+For projects that need a permanent `.devcontainer/` setup:
 
 1. **Copy the template** to your project:
    ```bash
@@ -18,10 +48,7 @@ A secure, network-isolated container for running Claude Code with `--dangerously
 
 2. **Configure credentials** (one-time setup on host):
    ```bash
-   # Login to Claude (if not already)
    claude login
-
-   # Enable --dangerously-skip-permissions without prompts
    echo '{"bypassPermissionsModeAccepted": true}' > ~/.claude/settings.json
    ```
 
@@ -64,6 +91,7 @@ The sandbox mounts credentials directly from your host as read-only files:
 ## Repository Structure
 
 ```text
+├── claude-sandbox.sh          # Launch script - sandbox Claude in any repo
 ├── images/                    # Published to GHCR
 │   ├── proxy/                 # Squid proxy with iptables
 │   │   ├── Dockerfile
@@ -78,8 +106,7 @@ The sandbox mounts credentials directly from your host as read-only files:
 │   ├── docker-compose.yml
 │   ├── whitelist.txt          # Example with common domains
 │   └── README.md
-├── local/                     # Personal full sandbox (not published)
-│   ├── Dockerfile             # Full dev environment with many runtimes
+├── local/                     # Local development files
 │   └── whitelist.txt          # Extended whitelist for this repo
 ├── .devcontainer/             # Uses local builds for this repo
 ├── .github/workflows/         # CI/CD for publishing images

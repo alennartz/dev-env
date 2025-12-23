@@ -109,16 +109,23 @@ volumes:
 
 ## Credential Handling
 
-Host credentials (`~/.claude/.credentials.json` and `settings.json`) are mounted directly as read-only files:
+Host Claude installation and configuration are mounted directly into the container:
 
 ```yaml
 volumes:
-  # Mount credentials directly (read-only)
-  - ${HOME}/.claude/.credentials.json:/home/developer/.claude/.credentials.json:ro
-  - ${HOME}/.claude/settings.json:/home/developer/.claude/settings.json:ro
+  # Claude binary (read-only, entrypoint creates symlink)
+  - ${HOME}/.local/share/claude:/home/developer/.local/share/claude:ro
+  # Claude config (read-write for session data)
+  - ${HOME}/.claude:/home/developer/.claude:cached
+  - ${HOME}/.claude.json:/home/developer/.claude.json:cached
+  # Git config for commits
+  - ${HOME}/.gitconfig:/home/developer/.gitconfig:ro
+  - ${HOME}/.git-credentials:/home/developer/.git-credentials:ro
 ```
 
-The base image creates the `developer` user with UID 1000 (matching the common host UID), so credentials are readable without ownership changes.
+The entrypoint script (`trust-proxy-ca.sh`) creates a symlink from `~/.local/bin/claude` to the latest version in the mounted directory.
+
+The base image creates the `developer` user with UID 1000 (matching the common host UID), so mounted files are readable without ownership changes.
 
 ## User Configuration
 
