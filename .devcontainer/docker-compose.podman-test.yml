@@ -1,0 +1,55 @@
+# Test compose for Podman-in-Docker de-risk testing
+# Adds capabilities and devices needed for rootless Podman
+
+services:
+  proxy:
+    build:
+      context: ../images/proxy
+    image: claude-sandbox-proxy:latest
+    cap_add:
+      - NET_ADMIN
+    volumes:
+      - squid-ssl:/etc/squid/ssl
+      - ../local/whitelist.txt:/etc/squid/whitelist.txt:ro
+
+  sandbox:
+    build:
+      context: ../images/base
+    image: claude-sandbox-base:latest
+    network_mode: "service:proxy"
+    depends_on:
+      proxy:
+        condition: service_healthy
+    # Podman test additions
+    cap_add:
+      - SYS_ADMIN
+      - MKNOD
+    devices:
+      - /dev/fuse:/dev/fuse
+    security_opt:
+      - seccomp:unconfined
+      - label:disable
+    environment:
+      - NODE_EXTRA_CA_CERTS=/etc/squid/ssl/squid-ca-cert.pem
+      - WORKSPACE_FOLDER=${LOCAL_WORKSPACE_FOLDER_BASENAME}
+    volumes:
+      - squid-ssl:/etc/squid/ssl:ro
+      - ..:/workspaces/${LOCAL_WORKSPACE_FOLDER_BASENAME}:cached
+      - ${HOME}/.local/share/claude:/home/developer/.local/share/claude:ro
+      - ${HOME}/.claude:/home/developer/.claude:cached
+      - ${HOME}/.claude.json:/home/developer/.claude.json:cached
+      - ${HOME}/.gitconfig:/home/developer/.gitconfig:ro
+      - ${HOME}/.git-credentials:/home/developer/.git-credentials:ro
+      # Mount cgroup for nested Podman
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
+    entrypoint: ["/bin/sh", "/usr/local/bin/trust-proxy-ca.sh"]
+    command: ["sleep", "infinity"]
+    healthcheck:
+      test: ["CMD", "test", "-x", "/home/developer/.local/bin/claude"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+      start_period: 5s
+
+volumes:
+  squid-ssl:

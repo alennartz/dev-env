@@ -18,8 +18,16 @@
 # ============================================
 .docker.io
 .docker.com
+.cloudflarestorage.com
 ghcr.io
+.quay.io
 # .mcr.microsoft.com - covered by .microsoft.com below
+
+# ============================================
+# LINUX PACKAGE REPOSITORIES
+# ============================================
+.debian.org
+.debian.net
 
 # ============================================
 # NODE.JS / NPM
