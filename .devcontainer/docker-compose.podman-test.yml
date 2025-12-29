@@ -4,8 +4,9 @@
 # Security configuration:
 # - CAP_SYS_ADMIN: Required for user namespace UID mapping via newuidmap
 #   (see docs/podman-uid-mapping-research.md for why this cannot be avoided)
-# - Custom seccomp profile: Blocks dangerous syscalls (kernel modules, BPF, kexec)
-#   while allowing namespace operations (see docs/seccomp-experiment-results.md)
+# - cap_drop: ALL - Drops all default capabilities, only adds back what's needed
+# - Custom seccomp profile: Blocks dangerous syscalls (kernel modules, BPF, kexec,
+#   unrestricted ptrace) while allowing namespace operations
 # - Network isolation preserved: all traffic through proxy whitelist
 #
 # Usage inside container:
@@ -30,10 +31,23 @@ services:
     depends_on:
       proxy:
         condition: service_healthy
-    # Podman support - CAP_SYS_ADMIN required for uid_map writes
+    # Security hardening: drop ALL capabilities, only add back what's required
+    cap_drop:
+      - ALL
     cap_add:
+      # Required for Podman user namespace UID mapping via newuidmap
       - SYS_ADMIN
+      # Required for /dev/fuse device node
       - MKNOD
+      # Required for gosu privilege drop and file ownership
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETUID
+      - SETGID
+      - SETFCAP
+      # Required for kill signals between processes
+      - KILL
     devices:
       - /dev/fuse:/dev/fuse
     security_opt:
@@ -51,6 +65,8 @@ services:
       - ${HOME}/.claude.json:/home/developer/.claude.json:cached
       - ${HOME}/.gitconfig:/home/developer/.gitconfig:ro
       - ${HOME}/.git-credentials:/home/developer/.git-credentials:ro
+      # Note: Docker's default maskedPaths already protects /proc/kcore, /proc/keys, etc.
+      # Additional /proc hardening would require AppArmor profile
     entrypoint: ["/bin/sh", "/usr/local/bin/trust-proxy-ca.sh"]
     command: ["sleep", "infinity"]
     healthcheck:

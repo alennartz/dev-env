@@ -1,5 +1,5 @@
 {
-  "_comment": "Minimal seccomp profile for rootless Podman. Allows namespace syscalls without CAP_SYS_ADMIN while keeping other restrictions.",
+  "_comment": "Hardened seccomp profile for rootless Podman. Allows namespace syscalls while blocking dangerous operations like kernel modules, BPF, kexec, and unrestricted ptrace.",
   "defaultAction": "SCMP_ACT_ERRNO",
   "defaultErrnoRet": 1,
   "archMap": [
@@ -162,11 +162,18 @@
       ]
     },
     {
-      "comment": "Allow ptrace for same-user debugging only (restricted)",
+      "comment": "ptrace - only allow PTRACE_TRACEME (self-trace, request 0) for debugging",
       "names": [
         "ptrace"
       ],
-      "action": "SCMP_ACT_ALLOW"
+      "action": "SCMP_ACT_ALLOW",
+      "args": [
+        {
+          "index": 0,
+          "value": 0,
+          "op": "SCMP_CMP_EQ"
+        }
+      ]
     },
     {
       "comment": "UID/GID mapping for user namespaces",
@@ -179,6 +186,40 @@
         "setresgid"
       ],
       "action": "SCMP_ACT_ALLOW"
+    },
+    {
+      "comment": "EXPLICITLY BLOCKED - dangerous syscalls that could enable container escape or exploitation (note: add_key/request_key allowed above for crun)",
+      "names": [
+        "init_module",
+        "finit_module",
+        "delete_module",
+        "bpf",
+        "kexec_load",
+        "kexec_file_load",
+        "reboot",
+        "swapon",
+        "swapoff",
+        "acct",
+        "settimeofday",
+        "clock_settime",
+        "clock_settime64",
+        "process_vm_readv",
+        "process_vm_writev",
+        "kcmp",
+        "userfaultfd",
+        "perf_event_open",
+        "lookup_dcookie",
+        "quotactl",
+        "quotactl_fd",
+        "nfsservctl",
+        "mbind",
+        "set_mempolicy",
+        "get_mempolicy",
+        "move_pages",
+        "migrate_pages"
+      ],
+      "action": "SCMP_ACT_ERRNO",
+      "errnoRet": 1
     }
   ]
 }
