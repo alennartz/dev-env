@@ -7,6 +7,11 @@
 
 We successfully replaced `seccomp:unconfined` with a custom seccomp profile that allows Podman to function while still blocking dangerous syscalls. However, **CAP_SYS_ADMIN is still required** for user namespace UID mapping operations.
 
+**Update (2025-12-29):** Additional hardening applied:
+- Restrict `ptrace` to `PTRACE_TRACEME` only (blocks `PTRACE_ATTACH` used for debugging/exploitation)
+- Add explicit blocks for: `process_vm_readv`, `process_vm_writev`, `userfaultfd`, `kcmp`, `perf_event_open`
+- Combined with `cap_drop: ALL` in docker-compose for defense in depth
+
 ## Findings
 
 ### What We Can Improve
@@ -40,6 +45,13 @@ These are blocked by our profile but would be allowed with `seccomp:unconfined`:
 | Swap | `swapon`, `swapoff` | Resource manipulation |
 | Time | `settimeofday`, `clock_settime` | Time-based attack vectors |
 | Accounting | `acct` | Process accounting manipulation |
+| Cross-process memory | `process_vm_readv`, `process_vm_writev` | Read/write other process memory |
+| Userfaultfd | `userfaultfd` | Used in race condition exploits |
+| Process comparison | `kcmp` | Kernel resource comparison (info leak) |
+| Performance | `perf_event_open` | Performance monitoring (info leak) |
+| NUMA | `mbind`, `set_mempolicy`, `move_pages`, `migrate_pages` | Memory policy manipulation |
+| Quota | `quotactl`, `quotactl_fd` | Filesystem quota manipulation |
+| Ptrace | `ptrace` with request != 0 | Only PTRACE_TRACEME allowed |
 
 ### Syscalls ALLOWED for Podman
 
@@ -49,7 +61,7 @@ The custom profile allows:
 - **Mount syscalls**: `mount`, `umount`, `umount2`, `pivot_root`
 - **Keyring syscalls**: `add_key`, `keyctl`, `request_key`
 - **Container runtime**: `sethostname`, `setdomainname`
-- **Debugging**: `ptrace` (for same-user debugging)
+- **Limited debugging**: `ptrace` with `PTRACE_TRACEME` only (self-trace)
 
 ## Remaining Risk: CAP_SYS_ADMIN
 
@@ -71,13 +83,23 @@ CAP_SYS_ADMIN still enables:
 
 ```yaml
 sandbox:
+  # Drop ALL default capabilities for defense in depth
+  cap_drop:
+    - ALL
   cap_add:
-    - SYS_ADMIN  # Required for uid_map
-    - MKNOD
+    - SYS_ADMIN     # Required for uid_map
+    - MKNOD         # Required for /dev/fuse
+    - CHOWN         # Required for gosu
+    - DAC_OVERRIDE  # Required for gosu
+    - FOWNER        # Required for file operations
+    - SETUID        # Required for gosu/newuidmap
+    - SETGID        # Required for gosu/newuidmap
+    - SETFCAP       # Required for capability operations
+    - KILL          # Required for process signals
   devices:
     - /dev/fuse:/dev/fuse
   security_opt:
-    - seccomp=/path/to/seccomp-podman.json  # Custom profile instead of unconfined!
+    - seccomp=../images/base/seccomp-podman.json  # Custom profile with ptrace restriction
     - label:disable
 ```
 
@@ -98,9 +120,14 @@ See [podman-uid-mapping-research.md](./podman-uid-mapping-research.md) for detai
 | Aspect | Original Config | Improved Config |
 |--------|-----------------|-----------------|
 | CAP_SYS_ADMIN | Required | Required (unchanged) |
+| Default capabilities | Docker defaults (14) | Only 9 required (`cap_drop: ALL`) |
 | Seccomp | `unconfined` | Custom minimal profile |
 | Blocked syscalls | 0 | ~30+ dangerous syscalls |
 | Kernel module loading | Allowed | **Blocked** |
 | BPF | Allowed | **Blocked** |
 | Kexec | Allowed | **Blocked** |
+| ptrace | Unrestricted | **TRACEME only** |
+| process_vm_* | Allowed | **Blocked** |
+| userfaultfd | Allowed | **Blocked** |
+| CAP_NET_RAW | Granted | **Dropped** |
 | Container escape risk | Higher | Lower |

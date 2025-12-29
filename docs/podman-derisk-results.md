@@ -11,6 +11,11 @@ We successfully validated that rootless Podman can run inside the Claude sandbox
 
 **Update (2025-12-29):** We successfully replaced `seccomp:unconfined` with a custom minimal seccomp profile that blocks dangerous syscalls (kernel modules, BPF, kexec) while allowing Podman operations. See [seccomp-experiment-results.md](./seccomp-experiment-results.md) and [podman-uid-mapping-research.md](./podman-uid-mapping-research.md) for details.
 
+**Update (2025-12-29):** Additional hardening applied:
+- Drop ALL default capabilities, explicitly add only required ones (removes `CAP_NET_RAW`, `CAP_AUDIT_WRITE`, etc.)
+- Restrict `ptrace` to `PTRACE_TRACEME` only (blocks `PTRACE_ATTACH`)
+- Block additional dangerous syscalls: `process_vm_readv`, `userfaultfd`, `kcmp`, `perf_event_open`
+
 ---
 
 ## Test Results Summary
@@ -164,9 +169,24 @@ services:
 | Capability/Option | Purpose | Risk Level |
 |-------------------|---------|------------|
 | `CAP_SYS_ADMIN` | User namespace creation, mount operations | **HIGH** |
-| `seccomp:unconfined` | Allow unshare, clone syscalls | **HIGH** |
+| Custom seccomp profile | Allow namespace syscalls, block dangerous ones | Medium |
 | `CAP_MKNOD` | Device node creation for fuse | Medium |
+| `CAP_CHOWN`, `CAP_FOWNER` | File ownership operations for gosu | Low |
+| `CAP_SETUID`, `CAP_SETGID` | Privilege drop via gosu, newuidmap | Low |
+| `CAP_DAC_OVERRIDE` | File access for gosu operations | Low |
+| `CAP_SETFCAP` | Capability management | Low |
+| `CAP_KILL` | Process signal handling | Low |
 | `/dev/fuse` device | Fuse filesystem support | Low |
+
+### What We're Dropping (from Docker defaults)
+
+| Capability | Why Dropped |
+|------------|-------------|
+| `CAP_NET_RAW` | No raw socket access needed |
+| `CAP_NET_BIND_SERVICE` | No privileged port binding needed |
+| `CAP_AUDIT_WRITE` | No audit log manipulation |
+| `CAP_SYS_CHROOT` | No chroot operations needed |
+| `CAP_SETPCAP` | Reduced capability manipulation |
 
 ### CAP_SYS_ADMIN Risks
 
@@ -189,23 +209,31 @@ References:
 - [OWASP Docker Security Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Docker_Security_Cheat_Sheet.html)
 - [Excessive Capabilities Cheat Sheet](https://0xn3va.gitbook.io/cheat-sheets/container/escaping/excessive-capabilities)
 
-### seccomp:unconfined Risks
+### Custom Seccomp Profile (Replaces seccomp:unconfined)
 
-Docker's default seccomp profile blocks ~44 dangerous syscalls. Disabling it allows:
+We use a custom seccomp profile (`images/base/seccomp-podman.json`) instead of disabling seccomp entirely:
 
-1. **unshare:** Create new namespaces (required for Podman, but also useful for escapes)
-2. **clone with CLONE_NEWUSER:** User namespace creation
-3. **mount:** Filesystem mounting (combined with SYS_ADMIN)
-4. **ptrace:** Process tracing (debugging, but also exploitation)
-5. **finit_module/init_module:** Kernel module loading
+**Allowed (required for Podman):**
+- `unshare`, `clone`, `clone3`, `setns` - Namespace operations
+- `mount`, `umount`, `pivot_root` - Filesystem operations
+- `add_key`, `keyctl`, `request_key` - Keyring for crun
 
-**Historical CVEs blocked by seccomp:**
-- CVE-2022-0185: Exploited via `unshare` syscall
-- Various kernel exploits requiring specific syscalls
+**Blocked (attack surface reduction):**
+- `init_module`, `finit_module`, `delete_module` - Kernel modules
+- `bpf` - eBPF programs
+- `kexec_load`, `kexec_file_load` - Kernel replacement
+- `process_vm_readv`, `process_vm_writev` - Cross-process memory
+- `userfaultfd` - Used in exploits
+- `kcmp` - Kernel resource comparison (info leak)
+- `perf_event_open` - Performance monitoring (info leak)
+- `ptrace` with `PTRACE_ATTACH` - Only `PTRACE_TRACEME` allowed
+
+**Historical CVEs mitigated:**
+- CVE-2022-0185: Would require `unshare` + kernel exploit (kernel modules blocked)
+- Various BPF exploits: `bpf` syscall blocked
 
 References:
 - [Docker Seccomp Documentation](https://docs.docker.com/engine/security/seccomp/)
-- [Breakout from Seccomp Unconfined Container](https://tbhaxor.com/breakout-from-seccomp-unconfined-container/)
 - [Datadog: Container Security Fundamentals - Seccomp](https://securitylabs.datadoghq.com/articles/container-security-fundamentals-part-6/)
 
 ### What We Retain
@@ -225,9 +253,11 @@ Despite the elevated capabilities, several security boundaries remain:
 |--------|---------------|-------------|-------|
 | Network exfiltration | Blocked | Blocked | Proxy still enforced |
 | Host filesystem access | Blocked | Blocked | No host mounts exposed |
-| Container escape to host | Very Difficult | Possible | CAP_SYS_ADMIN + seccomp:unconfined |
-| Kernel exploitation | Blocked | Possible | seccomp:unconfined allows more syscalls |
-| Privilege escalation in sandbox | Limited | Elevated | More attack surface |
+| Container escape to host | Very Difficult | Difficult | CAP_SYS_ADMIN required, but seccomp blocks many vectors |
+| Kernel exploitation | Blocked | Limited | Custom seccomp blocks modules, BPF, kexec |
+| Privilege escalation in sandbox | Limited | Moderate | Fewer caps than default Docker |
+| Raw socket attacks | Blocked | Blocked | CAP_NET_RAW explicitly dropped |
+| Cross-process memory access | Blocked | Blocked | process_vm_* syscalls blocked |
 
 ### Comparison: Podman Config vs --privileged
 
@@ -235,14 +265,19 @@ Our configuration is NOT equivalent to `--privileged`:
 
 | Feature | Our Config | --privileged |
 |---------|-----------|--------------|
-| All capabilities | No (only SYS_ADMIN, MKNOD) | Yes |
+| All capabilities | No (9 specific caps) | Yes (all 41) |
+| Default caps dropped | Yes (`cap_drop: ALL`) | No |
 | All devices | No (only /dev/fuse) | Yes |
-| Seccomp | Disabled | Disabled |
+| Seccomp | Custom restrictive profile | Disabled |
 | AppArmor | Disabled | Disabled |
 | Read-only paths | Preserved | Removed |
 | Masked paths | Preserved | Removed |
 | Host network | No | Optional |
 | Host PID | No | Optional |
+| CAP_NET_RAW | **Dropped** | Granted |
+| Kernel modules | **Blocked by seccomp** | Allowed |
+| BPF | **Blocked by seccomp** | Allowed |
+| ptrace ATTACH | **Blocked by seccomp** | Allowed |
 
 ---
 
@@ -324,13 +359,23 @@ RUN mv /usr/bin/podman /usr/bin/podman.real \
 ### Docker Compose Changes
 ```yaml
 sandbox:
+  # Drop ALL default capabilities, add only what's required
+  cap_drop:
+    - ALL
   cap_add:
-    - SYS_ADMIN
-    - MKNOD
+    - SYS_ADMIN     # Required for Podman UID mapping
+    - MKNOD         # Required for /dev/fuse
+    - CHOWN         # Required for gosu/file ownership
+    - DAC_OVERRIDE  # Required for gosu
+    - FOWNER        # Required for file operations
+    - SETUID        # Required for gosu/newuidmap
+    - SETGID        # Required for gosu/newuidmap
+    - SETFCAP       # Required for capability operations
+    - KILL          # Required for process signals
   devices:
     - /dev/fuse:/dev/fuse
   security_opt:
-    - seccomp=../images/base/seccomp-podman.json  # Custom profile, not unconfined!
+    - seccomp=../images/base/seccomp-podman.json  # Custom profile with ptrace restriction
     - label:disable
 ```
 
@@ -353,7 +398,11 @@ sandbox:
 
 ## Conclusion
 
-Podman-in-sandbox is technically viable and preserves the critical network isolation property. However, the required capabilities (`CAP_SYS_ADMIN`, `seccomp:unconfined`) meaningfully weaken container isolation and should be treated as an opt-in feature for users who understand the trade-offs.
+Podman-in-sandbox is technically viable and preserves the critical network isolation property. The required `CAP_SYS_ADMIN` capability is a meaningful security trade-off, but we've significantly reduced the attack surface through:
+
+1. **Capability minimization:** Drop all default caps, add only 9 required ones
+2. **Custom seccomp profile:** Block kernel modules, BPF, kexec, unrestricted ptrace
+3. **Explicit syscall blocking:** Block `process_vm_*`, `userfaultfd`, `kcmp`, `perf_event_open`
 
 The proxy-based network isolation remains effective: child containers cannot bypass the whitelist, and volume mounts come from the sandbox filesystem rather than the host. This satisfies the core security requirement that Claude cannot exfiltrate data to arbitrary destinations.
 
