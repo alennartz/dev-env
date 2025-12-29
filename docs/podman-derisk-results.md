@@ -7,7 +7,9 @@
 
 We successfully validated that rootless Podman can run inside the Claude sandbox container, enabling Docker-in-Docker functionality while preserving network isolation through the proxy. All five phases of the de-risk plan passed, but the solution requires elevated capabilities that weaken the container's security boundary.
 
-**Key Finding:** Podman works, but requires `CAP_SYS_ADMIN` and `seccomp:unconfined`, which significantly reduces isolation from the host. This is a meaningful security trade-off that should be opt-in for users who need container functionality.
+**Key Finding:** Podman works, but requires `CAP_SYS_ADMIN`, which significantly reduces isolation from the host. This is a meaningful security trade-off that should be opt-in for users who need container functionality.
+
+**Update (2025-12-29):** We successfully replaced `seccomp:unconfined` with a custom minimal seccomp profile that blocks dangerous syscalls (kernel modules, BPF, kexec) while allowing Podman operations. See [seccomp-experiment-results.md](./seccomp-experiment-results.md) and [podman-uid-mapping-research.md](./podman-uid-mapping-research.md) for details.
 
 ---
 
@@ -15,11 +17,13 @@ We successfully validated that rootless Podman can run inside the Claude sandbox
 
 | Phase | Result | Configuration Required |
 |-------|--------|----------------------|
-| 1. User Namespace Nesting | PASS | `CAP_SYS_ADMIN`, `seccomp:unconfined` |
+| 1. User Namespace Nesting | PASS | `CAP_SYS_ADMIN`, custom seccomp profile* |
 | 2. Rootless Podman Execution | PASS | `crun` runtime, `--cgroups=disabled`, `--network=host` |
 | 3. Storage Driver | PASS | Native `overlay` (no changes needed) |
 | 4. Network Isolation | PASS | Child containers inherit sandbox network, proxy enforced |
 | 5. Compose Compatibility | PASS | Wrapper script to inject `--cgroups=disabled` |
+
+*Originally tested with `seccomp:unconfined`, later improved to use custom profile (`images/base/seccomp-podman.json`)
 
 ---
 
@@ -326,7 +330,7 @@ sandbox:
   devices:
     - /dev/fuse:/dev/fuse
   security_opt:
-    - seccomp:unconfined
+    - seccomp=../images/base/seccomp-podman.json  # Custom profile, not unconfined!
     - label:disable
 ```
 

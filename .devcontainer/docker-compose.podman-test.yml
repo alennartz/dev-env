@@ -1,5 +1,15 @@
-# Test compose for Podman-in-Docker de-risk testing
-# Adds capabilities and devices needed for rootless Podman
+# Compose for Podman-in-Docker support
+# Enables rootless Podman inside the sandbox with reduced attack surface
+#
+# Security configuration:
+# - CAP_SYS_ADMIN: Required for user namespace UID mapping via newuidmap
+#   (see docs/podman-uid-mapping-research.md for why this cannot be avoided)
+# - Custom seccomp profile: Blocks dangerous syscalls (kernel modules, BPF, kexec)
+#   while allowing namespace operations (see docs/seccomp-experiment-results.md)
+# - Network isolation preserved: all traffic through proxy whitelist
+#
+# Usage inside container:
+#   podman --runtime=/usr/bin/crun run --rm --network=host --cgroups=disabled alpine echo hello
 
 services:
   proxy:
@@ -20,14 +30,15 @@ services:
     depends_on:
       proxy:
         condition: service_healthy
-    # Podman test additions
+    # Podman support - CAP_SYS_ADMIN required for uid_map writes
     cap_add:
       - SYS_ADMIN
       - MKNOD
     devices:
       - /dev/fuse:/dev/fuse
     security_opt:
-      - seccomp:unconfined
+      # Custom seccomp profile - blocks kernel modules, BPF, kexec while allowing Podman
+      - seccomp=../images/base/seccomp-podman.json
       - label:disable
     environment:
       - NODE_EXTRA_CA_CERTS=/etc/squid/ssl/squid-ca-cert.pem
@@ -40,8 +51,6 @@ services:
       - ${HOME}/.claude.json:/home/developer/.claude.json:cached
       - ${HOME}/.gitconfig:/home/developer/.gitconfig:ro
       - ${HOME}/.git-credentials:/home/developer/.git-credentials:ro
-      # Mount cgroup for nested Podman
-      - /sys/fs/cgroup:/sys/fs/cgroup:rw
     entrypoint: ["/bin/sh", "/usr/local/bin/trust-proxy-ca.sh"]
     command: ["sleep", "infinity"]
     healthcheck:
