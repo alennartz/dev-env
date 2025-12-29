@@ -33,8 +33,10 @@ Launch Claude Code in a sandboxed Docker environment.
 
 Options:
     --repo PATH     Use PATH as the target repository (default: current directory)
-    --status        Show status of running sandbox containers
-    --stop          Stop running sandbox containers
+    --status        Show status of running sandbox containers for this repo
+    --stop          Stop running sandbox containers for this repo
+    --stop-all      Stop ALL running sandbox instances across all repos
+    --list          List all running sandbox instances across all repos
     --help          Show this help message
 
 Image Selection (automatic):
@@ -74,6 +76,14 @@ while [[ $# -gt 0 ]]; do
             ACTION="stop"
             shift
             ;;
+        --stop-all)
+            ACTION="stop-all"
+            shift
+            ;;
+        --list)
+            ACTION="list"
+            shift
+            ;;
         --help|-h)
             usage
             exit 0
@@ -90,8 +100,14 @@ done
 TARGET_REPO="$(cd "$TARGET_REPO" && pwd)"
 WORKSPACE_NAME=$(basename "$TARGET_REPO")
 
-# Temp directory for generated compose file (persistent across runs for same repo)
+# Create unique identifiers for this repo's sandbox
 REPO_HASH=$(echo "$TARGET_REPO" | md5sum | cut -c1-8)
+# Project name must be unique per repo to allow concurrent sandboxes
+# Uses sanitized workspace name + hash for both uniqueness and human readability
+SANITIZED_NAME=$(echo "$WORKSPACE_NAME" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g' | sed 's/--*/-/g' | sed 's/^-//' | sed 's/-$//')
+PROJECT_NAME="sandbox-${SANITIZED_NAME}-${REPO_HASH}"
+
+# Temp directory for generated compose file (persistent across runs for same repo)
 TEMP_DIR="/tmp/claude-sandbox-$REPO_HASH"
 
 # =============================================================================
@@ -246,6 +262,13 @@ EOF
 # Container Management
 # =============================================================================
 
+# Helper to run docker compose with proper project isolation
+dc() {
+    local compose_file="$1"
+    shift
+    docker compose -p "$PROJECT_NAME" -f "$compose_file" "$@"
+}
+
 get_compose_file() {
     local image_source
     image_source=$(detect_image_source)
@@ -263,7 +286,7 @@ get_compose_file() {
 
 is_running() {
     local compose_file="$1"
-    docker compose -f "$compose_file" ps --status running 2>/dev/null | grep -q sandbox
+    dc "$compose_file" ps --status running 2>/dev/null | grep -q sandbox
 }
 
 images_stale() {
@@ -271,7 +294,7 @@ images_stale() {
     local stale=1  # 1 = not stale (false), 0 = stale (true)
 
     local containers
-    containers=$(docker compose -f "$compose_file" ps -q 2>/dev/null)
+    containers=$(dc "$compose_file" ps -q 2>/dev/null)
 
     if [[ -z "$containers" ]]; then
         return 1
@@ -304,7 +327,7 @@ start_containers() {
     if is_running "$compose_file"; then
         if images_stale "$compose_file"; then
             log "Detected outdated images, restarting containers..."
-            docker compose -f "$compose_file" down
+            dc "$compose_file" down
         else
             log "Containers already running"
             return
@@ -320,12 +343,12 @@ start_containers() {
         echo "LOCAL_WORKSPACE_FOLDER_BASENAME=$WORKSPACE_NAME" > "$TARGET_REPO/.devcontainer/.env"
     fi
 
-    docker compose -f "$compose_file" up -d
+    dc "$compose_file" up -d
 
     log "Waiting for sandbox to be ready..."
     for i in {1..30}; do
         # Check if sandbox service is healthy (look for line ending with "sandbox" service column and "(healthy)")
-        if docker compose -f "$compose_file" ps 2>/dev/null | grep -E "sandbox[[:space:]].*\(healthy\)" | grep -qv "proxy"; then
+        if dc "$compose_file" ps 2>/dev/null | grep -E "sandbox[[:space:]].*\(healthy\)" | grep -qv "proxy"; then
             log "Sandbox is ready"
             break
         fi
@@ -338,7 +361,7 @@ stop_containers() {
 
     if is_running "$compose_file"; then
         log "Stopping containers..."
-        docker compose -f "$compose_file" down
+        dc "$compose_file" down
         log "Containers stopped"
     else
         warn "No containers running"
@@ -352,6 +375,7 @@ show_status() {
 
     echo ""
     info "Target repo: $TARGET_REPO"
+    info "Project name: $PROJECT_NAME"
     info "Image source: $image_source"
     info "Compose file: $compose_file"
 
@@ -364,7 +388,56 @@ show_status() {
     fi
 
     echo ""
-    docker compose -f "$compose_file" ps 2>/dev/null || warn "No containers found"
+    dc "$compose_file" ps 2>/dev/null || warn "No containers found"
+}
+
+list_all_sandboxes() {
+    echo ""
+    info "All running sandbox instances:"
+    echo ""
+
+    # Find all sandbox containers by label pattern
+    local containers
+    containers=$(docker ps --filter "name=sandbox" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null)
+
+    if [[ -z "$containers" || "$containers" == "NAMES"*"STATUS"* && $(echo "$containers" | wc -l) -le 1 ]]; then
+        warn "No sandbox containers running"
+        return
+    fi
+
+    echo "$containers"
+    echo ""
+
+    # Also show associated projects from compose labels
+    info "Project details:"
+    docker ps --filter "name=sandbox" --format "{{.Labels}}" 2>/dev/null | \
+        grep -o 'com.docker.compose.project=[^,]*' | \
+        sed 's/com.docker.compose.project=/  - /' | \
+        sort -u
+}
+
+stop_all_sandboxes() {
+    echo ""
+    info "Stopping all sandbox instances..."
+
+    # Get unique project names from running sandbox containers
+    local projects
+    projects=$(docker ps --filter "name=sandbox" --format "{{.Labels}}" 2>/dev/null | \
+        grep -o 'com.docker.compose.project=[^,]*' | \
+        sed 's/com.docker.compose.project=//' | \
+        sort -u)
+
+    if [[ -z "$projects" ]]; then
+        warn "No sandbox containers running"
+        return
+    fi
+
+    for project in $projects; do
+        log "Stopping project: $project"
+        docker compose -p "$project" down 2>/dev/null || warn "Failed to stop $project"
+    done
+
+    log "All sandbox instances stopped"
 }
 
 # =============================================================================
@@ -372,6 +445,17 @@ show_status() {
 # =============================================================================
 
 main() {
+    # Handle global actions early (don't need compose file)
+    if [[ "$ACTION" == "list" ]]; then
+        list_all_sandboxes
+        return
+    fi
+
+    if [[ "$ACTION" == "stop-all" ]]; then
+        stop_all_sandboxes
+        return
+    fi
+
     local compose_file
     compose_file=$(get_compose_file)
 
@@ -386,12 +470,13 @@ main() {
             local image_source
             image_source=$(detect_image_source)
             info "Target repo: $TARGET_REPO"
+            info "Project name: $PROJECT_NAME"
             info "Image source: $image_source"
 
             start_containers "$compose_file"
 
             log "Launching Claude Code in sandbox..."
-            docker compose -f "$compose_file" exec -u developer -w "/workspaces/$WORKSPACE_NAME" -it sandbox claude --dangerously-skip-permissions
+            dc "$compose_file" exec -u developer -w "/workspaces/$WORKSPACE_NAME" -it sandbox claude --dangerously-skip-permissions
             ;;
     esac
 }
