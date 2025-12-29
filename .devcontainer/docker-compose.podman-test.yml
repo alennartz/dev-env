@@ -54,6 +54,8 @@ services:
       # Custom seccomp profile - blocks kernel modules, BPF, kexec while allowing Podman
       - seccomp=../images/base/seccomp-podman.json
       - label:disable
+      # NOTE: no-new-privileges:true is NOT compatible with Podman
+      # newuidmap is a setuid binary that requires privilege escalation to write to uid_map
     environment:
       - NODE_EXTRA_CA_CERTS=/etc/squid/ssl/squid-ca-cert.pem
       - WORKSPACE_FOLDER=${LOCAL_WORKSPACE_FOLDER_BASENAME}

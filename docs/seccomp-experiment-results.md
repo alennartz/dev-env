@@ -63,6 +63,21 @@ The custom profile allows:
 - **Container runtime**: `sethostname`, `setdomainname`
 - **Limited debugging**: `ptrace` with `PTRACE_TRACEME` only (self-trace)
 
+## What We Cannot Add
+
+### no-new-privileges
+
+The `no-new-privileges:true` security option **cannot be used** with Podman:
+
+```
+Error: cannot set up namespace using "/usr/bin/newuidmap": exit status 1
+newuidmap: write to uid_map failed: Operation not permitted
+```
+
+**Why:** `newuidmap` is a setuid binary that must escalate privileges to write to `/proc/[pid]/uid_map`. The `no-new-privileges` flag prevents any setuid/setgid binaries from gaining elevated privileges, which breaks Podman's user namespace setup.
+
+This is an unavoidable trade-off for rootless container support inside Docker.
+
 ## Remaining Risk: CAP_SYS_ADMIN
 
 CAP_SYS_ADMIN still enables:
