@@ -10,6 +10,7 @@ The repo is organized into these main areas:
 - **`images/`** - Published to GHCR (reusable by other repos)
 - **`template/`** - Files users copy to their project's `.devcontainer/`
 - **`local/`** - Extended whitelist for this repo's development
+- **`docs/adr/`** - Architecture Decision Records for key design choices
 
 The `.devcontainer/` folder is minimal and references the local builds.
 
@@ -24,9 +25,14 @@ dev-env/
 │   │   ├── squid.conf         # Transparent proxy config
 │   │   ├── whitelist.txt      # MINIMAL: only .anthropic.com
 │   │   └── proxy-entrypoint.sh
-│   └── base/
-│       ├── Dockerfile         # Debian slim (~418MB)
-│       └── trust-proxy-ca.sh
+│   ├── base/
+│   │   ├── Dockerfile         # Debian slim (~418MB)
+│   │   ├── trust-proxy-ca.sh
+│   │   └── seccomp-podman.json  # Custom seccomp for Podman
+│   └── base-podman/
+│       ├── Dockerfile         # Base + Podman for DinD (~550MB)
+│       ├── podman-wrapper.sh  # Injects --cgroups=disabled
+│       └── containers.conf    # Podman configuration
 ├── template/                  # Users copy this to their .devcontainer/
 │   ├── devcontainer.json
 │   ├── docker-compose.yml     # References GHCR images
@@ -34,6 +40,16 @@ dev-env/
 │   └── README.md
 ├── local/                     # Local development files
 │   └── whitelist.txt          # Extended whitelist for this repo
+├── docs/
+│   ├── adr/                   # Architecture Decision Records
+│   │   ├── 001-reject-host-docker-socket.md
+│   │   ├── 002-reject-sysbox-envbox.md
+│   │   ├── 003-reject-privileged-flag.md
+│   │   ├── 004-replace-seccomp-unconfined.md
+│   │   ├── 005-no-new-privileges-incompatible.md
+│   │   └── 006-adopt-podman-rootless.md
+│   ├── security.md            # Security model documentation
+│   └── future-directions.md   # Alternative DinD approaches
 ├── .devcontainer/             # Uses local builds
 │   ├── devcontainer.json
 │   └── docker-compose.yml
@@ -59,6 +75,12 @@ dev-env/
 - Includes: git, ripgrep, jq, gosu (Claude Code mounted from host)
 - Non-root `developer` user with **NO SUDO**
 - PATH includes `~/.local/bin` for mounted Claude binary
+
+**`images/base-podman/`** - Docker-in-Docker variant:
+- Extends base image with Podman, crun, fuse-overlayfs
+- Requires elevated capabilities (CAP_SYS_ADMIN) - see ADR-006
+- Includes podman-wrapper.sh for compose compatibility
+- Docker CLI alias (`docker` → `podman`)
 
 ### Template (template/)
 
@@ -109,6 +131,30 @@ root (PID 1) → trust-proxy-ca.sh → exec gosu developer "$@" → developer (P
 
 Unlike sudo, gosu cannot be used to regain root later - it requires `setuid()` which only root can call. See `docs/security.md` for details.
 
+### Docker-in-Docker Security (Podman Variant)
+
+The `base-podman` image requires elevated capabilities for user namespace UID mapping:
+
+```yaml
+cap_drop:
+  - ALL
+cap_add:
+  - SYS_ADMIN     # Required for Podman UID mapping
+  - MKNOD         # Required for /dev/fuse
+  - CHOWN, DAC_OVERRIDE, FOWNER  # Required for gosu
+  - SETUID, SETGID, SETFCAP, KILL  # Required for operations
+security_opt:
+  - seccomp=seccomp-podman.json  # Custom profile
+```
+
+**Mitigations:**
+- Custom seccomp profile blocks kernel modules, BPF, kexec
+- Only 9 capabilities vs Docker's 14 defaults
+- Network isolation preserved (all traffic through proxy)
+- Non-root user execution
+
+See [ADR-006](docs/adr/006-adopt-podman-rootless.md) for the full security analysis.
+
 ## Credentials and Permissions
 
 The host's Claude installation and git config are mounted directly into the container:
@@ -153,11 +199,12 @@ Host settings are used directly (not overridden by the container). To enable byp
 ### Build Commands
 
 ```bash
-make build-all     # Build all images
-make build-proxy   # Build proxy only
-make build-base    # Build base sandbox only
-make test          # Test the setup
-make clean         # Clean up
+make build-all      # Build all images (proxy, base, base-podman)
+make build-proxy    # Build proxy only
+make build-base     # Build base sandbox only
+make build-base-podman  # Build Podman variant only
+make test           # Test the setup
+make clean          # Clean up
 ```
 
 ### Using VS Code
@@ -182,6 +229,17 @@ docker compose -f .devcontainer/docker-compose.yml build proxy
 ### Updating published base images
 
 Edit `images/base/Dockerfile`, commit, push to main. The image is built and published automatically via GitHub Actions.
+
+## Architecture Decision Records
+
+Key design decisions are documented in `docs/adr/`:
+
+- [ADR-001](docs/adr/001-reject-host-docker-socket.md): Why host Docker socket approaches were rejected
+- [ADR-002](docs/adr/002-reject-sysbox-envbox.md): Why Sysbox/Envbox don't work in WSL2
+- [ADR-003](docs/adr/003-reject-privileged-flag.md): Why we don't use `--privileged`
+- [ADR-004](docs/adr/004-replace-seccomp-unconfined.md): Why we use a custom seccomp profile
+- [ADR-005](docs/adr/005-no-new-privileges-incompatible.md): Why `no-new-privileges` can't be used
+- [ADR-006](docs/adr/006-adopt-podman-rootless.md): Why Podman rootless is the chosen DinD approach
 
 ## Notes
 
