@@ -3,7 +3,7 @@
 #
 # SECURITY NOTE: This image requires CAP_SYS_ADMIN and custom seccomp profile.
 # Use the base image instead if you don't need container functionality.
-# See docs/podman-derisk-results.md for security trade-off analysis.
+# See docs/adr/006-adopt-podman-rootless.md for security trade-off analysis.
 
 ARG BASE_IMAGE=claude-sandbox-base:latest
 FROM ${BASE_IMAGE}
