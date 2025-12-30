@@ -42,5 +42,57 @@ services:
       retries: 15
       start_period: 5s
 
+  # Podman-enabled sandbox for Docker-in-Docker functionality
+  # Use this instead of 'sandbox' when you need to run containers
+  # SECURITY: Requires elevated capabilities - see docs/adr/006-adopt-podman-rootless.md
+  sandbox-podman:
+    build:
+      context: ../images/base-podman
+    image: claude-sandbox-base-podman:latest
+    network_mode: "service:proxy"
+    depends_on:
+      proxy:
+        condition: service_healthy
+    # Drop all default capabilities, add only what's required for Podman
+    cap_drop:
+      - ALL
+    cap_add:
+      - SYS_ADMIN     # Required for user namespace UID mapping
+      - MKNOD         # Required for /dev/fuse
+      - CHOWN         # Required for gosu/file ownership
+      - DAC_OVERRIDE  # Required for gosu
+      - FOWNER        # Required for file operations
+      - SETUID        # Required for gosu/newuidmap
+      - SETGID        # Required for gosu/newgidmap
+      - SETFCAP       # Required for capability operations
+      - KILL          # Required for process signals
+    devices:
+      - /dev/fuse:/dev/fuse
+    security_opt:
+      - seccomp=../images/base/seccomp-podman.json
+      - label:disable
+    environment:
+      - NODE_EXTRA_CA_CERTS=/etc/squid/ssl/squid-ca-cert.pem
+      - WORKSPACE_FOLDER=${LOCAL_WORKSPACE_FOLDER_BASENAME}
+    volumes:
+      - squid-ssl:/etc/squid/ssl:ro
+      - ..:/workspaces/${LOCAL_WORKSPACE_FOLDER_BASENAME}:cached
+      # Mount Claude binary directory (entrypoint creates symlink in ~/.local/bin)
+      - ${HOME}/.local/share/claude:/home/developer/.local/share/claude:ro
+      # Mount Claude config directly (RW)
+      - ${HOME}/.claude:/home/developer/.claude:cached
+      - ${HOME}/.claude.json:/home/developer/.claude.json:cached
+      # Mount git config for commits
+      - ${HOME}/.gitconfig:/home/developer/.gitconfig:ro
+      - ${HOME}/.git-credentials:/home/developer/.git-credentials:ro
+    entrypoint: ["/bin/sh", "/usr/local/bin/trust-proxy-ca.sh"]
+    command: ["sleep", "infinity"]
+    healthcheck:
+      test: ["CMD", "test", "-x", "/home/developer/.local/bin/claude"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+      start_period: 5s
+
 volumes:
   squid-ssl:

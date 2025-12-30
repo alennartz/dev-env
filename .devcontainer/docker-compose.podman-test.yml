@@ -1,0 +1,82 @@
+# Compose for Podman-in-Docker support
+# Enables rootless Podman inside the sandbox with reduced attack surface
+#
+# Security configuration:
+# - CAP_SYS_ADMIN: Required for user namespace UID mapping via newuidmap
+#   (see docs/podman-uid-mapping-research.md for why this cannot be avoided)
+# - cap_drop: ALL - Drops all default capabilities, only adds back what's needed
+# - Custom seccomp profile: Blocks dangerous syscalls (kernel modules, BPF, kexec,
+#   unrestricted ptrace) while allowing namespace operations
+# - Network isolation preserved: all traffic through proxy whitelist
+#
+# Usage inside container:
+#   podman --runtime=/usr/bin/crun run --rm --network=host --cgroups=disabled alpine echo hello
+
+services:
+  proxy:
+    build:
+      context: ../images/proxy
+    image: claude-sandbox-proxy:latest
+    cap_add:
+      - NET_ADMIN
+    volumes:
+      - squid-ssl:/etc/squid/ssl
+      - ../local/whitelist.txt:/etc/squid/whitelist.txt:ro
+
+  sandbox:
+    build:
+      context: ../images/base
+    image: claude-sandbox-base:latest
+    network_mode: "service:proxy"
+    depends_on:
+      proxy:
+        condition: service_healthy
+    # Security hardening: drop ALL capabilities, only add back what's required
+    cap_drop:
+      - ALL
+    cap_add:
+      # Required for Podman user namespace UID mapping via newuidmap
+      - SYS_ADMIN
+      # Required for /dev/fuse device node
+      - MKNOD
+      # Required for gosu privilege drop and file ownership
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETUID
+      - SETGID
+      - SETFCAP
+      # Required for kill signals between processes
+      - KILL
+    devices:
+      - /dev/fuse:/dev/fuse
+    security_opt:
+      # Custom seccomp profile - blocks kernel modules, BPF, kexec while allowing Podman
+      - seccomp=../images/base/seccomp-podman.json
+      - label:disable
+      # NOTE: no-new-privileges:true is NOT compatible with Podman
+      # newuidmap is a setuid binary that requires privilege escalation to write to uid_map
+    environment:
+      - NODE_EXTRA_CA_CERTS=/etc/squid/ssl/squid-ca-cert.pem
+      - WORKSPACE_FOLDER=${LOCAL_WORKSPACE_FOLDER_BASENAME}
+    volumes:
+      - squid-ssl:/etc/squid/ssl:ro
+      - ..:/workspaces/${LOCAL_WORKSPACE_FOLDER_BASENAME}:cached
+      - ${HOME}/.local/share/claude:/home/developer/.local/share/claude:ro
+      - ${HOME}/.claude:/home/developer/.claude:cached
+      - ${HOME}/.claude.json:/home/developer/.claude.json:cached
+      - ${HOME}/.gitconfig:/home/developer/.gitconfig:ro
+      - ${HOME}/.git-credentials:/home/developer/.git-credentials:ro
+      # Note: Docker's default maskedPaths already protects /proc/kcore, /proc/keys, etc.
+      # Additional /proc hardening would require AppArmor profile
+    entrypoint: ["/bin/sh", "/usr/local/bin/trust-proxy-ca.sh"]
+    command: ["sleep", "infinity"]
+    healthcheck:
+      test: ["CMD", "test", "-x", "/home/developer/.local/bin/claude"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+      start_period: 5s
+
+volumes:
+  squid-ssl:

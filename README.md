@@ -7,7 +7,8 @@ A secure, network-isolated container for running Claude Code with `--dangerously
 | Image | Size | Purpose |
 |-------|------|---------|
 | `ghcr.io/alennartz/claude-sandbox-proxy` | ~22MB | Squid proxy with SSL bump + iptables (minimal whitelist) |
-| `ghcr.io/alennartz/claude-sandbox-base:latest` | ~418MB | Debian slim + Claude Code + git + essentials |
+| `ghcr.io/alennartz/claude-sandbox-base` | ~418MB | Debian slim + Claude Code + git + essentials |
+| `ghcr.io/alennartz/claude-sandbox-base-podman` | ~550MB | Base + Podman for Docker-in-Docker (elevated capabilities) |
 
 ## Quick Start
 
@@ -79,6 +80,28 @@ See [template/README.md](template/README.md) for customization options.
 - **Capability separation**: Only proxy has NET_ADMIN
 - **Read-only credentials**: Host auth files mounted as read-only
 
+## Docker-in-Docker Support
+
+For workflows requiring container operations (building images, running containers), use the Podman-enabled variant:
+
+```yaml
+# In docker-compose.yml, use sandbox-podman instead of sandbox
+services:
+  sandbox-podman:
+    image: ghcr.io/alennartz/claude-sandbox-base-podman:latest
+```
+
+**Security trade-off**: The Podman variant requires `CAP_SYS_ADMIN` for user namespace UID mapping. This is an elevated capability that increases attack surface. Mitigations include:
+
+- Custom seccomp profile blocking kernel modules, BPF, kexec
+- Explicit capability dropping (only 9 capabilities vs Docker's 14 defaults)
+- Network isolation preserved (all traffic through proxy)
+- Non-root user execution
+
+See [ADR-006](docs/adr/006-adopt-podman-rootless.md) for the full security analysis.
+
+**Default recommendation**: Use the base image unless you specifically need Docker-in-Docker.
+
 ## Credentials
 
 The sandbox mounts credentials directly from your host as read-only files:
@@ -98,9 +121,14 @@ The sandbox mounts credentials directly from your host as read-only files:
 │   │   ├── squid.conf
 │   │   ├── whitelist.txt      # Minimal: only .anthropic.com
 │   │   └── proxy-entrypoint.sh
-│   └── base/                  # Minimal sandbox
-│       ├── Dockerfile         # Debian slim
-│       └── trust-proxy-ca.sh
+│   ├── base/                  # Minimal sandbox
+│   │   ├── Dockerfile
+│   │   ├── trust-proxy-ca.sh
+│   │   └── seccomp-podman.json  # Security profile for Podman
+│   └── base-podman/           # Podman-enabled variant
+│       ├── Dockerfile
+│       ├── podman-wrapper.sh
+│       └── containers.conf
 ├── template/                  # Copy to your project's .devcontainer/
 │   ├── devcontainer.json
 │   ├── docker-compose.yml
@@ -108,6 +136,10 @@ The sandbox mounts credentials directly from your host as read-only files:
 │   └── README.md
 ├── local/                     # Local development files
 │   └── whitelist.txt          # Extended whitelist for this repo
+├── docs/
+│   ├── adr/                   # Architecture Decision Records
+│   ├── security.md            # Security model documentation
+│   └── future-directions.md   # Alternative approaches for DinD
 ├── .devcontainer/             # Uses local builds for this repo
 ├── .github/workflows/         # CI/CD for publishing images
 ├── Makefile                   # Build helpers

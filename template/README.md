@@ -1,109 +1,154 @@
 # Claude Code Sandbox Template
 
-This template sets up a secure, sandboxed environment for running Claude Code with `--dangerously-skip-permissions`.
-
-> **Tip**: For a quicker approach that doesn't require copying files, use the `claude-sandbox.sh` script from the [dev-env repo](https://github.com/alennartz/dev-env). It can sandbox any project without modifying it.
+Copy this folder to your project's `.devcontainer/` to run Claude Code in a secure, network-isolated sandbox.
 
 ## Quick Start
 
-1. **Copy this folder** to your project's `.devcontainer/` directory
+1. Copy to `.devcontainer/` in your project
+2. Edit `whitelist.txt` with domains your project needs
+3. Open in VS Code → "Reopen in Container"
+4. Run `claude --dangerously-skip-permissions`
 
-2. **Configure your host for `--dangerously-skip-permissions`**:
-   ```bash
-   # Set the bypass flag (one-time setup)
-   echo '{"bypassPermissionsModeAccepted": true}' > ~/.claude/settings.json
-   ```
-   This allows `--dangerously-skip-permissions` to work without prompts.
+**One-time host setup:**
+```bash
+claude login
+echo '{"bypassPermissionsModeAccepted": true}' > ~/.claude/settings.json
+```
 
-3. **Customize the whitelist** in `whitelist.txt`:
-   - Add domains your project needs (package registries, APIs, etc.)
+## Extensibility
 
-4. **Open in VS Code** and click "Reopen in Container"
+### Adding Tools
 
-5. **Run Claude Code**:
-   ```bash
-   claude --dangerously-skip-permissions
-   ```
-
-## Customization
-
-### Adding Custom Tools
-
-Create a `Dockerfile` in your `.devcontainer/`:
+Create a `Dockerfile` in `.devcontainer/`:
 
 ```dockerfile
 FROM ghcr.io/alennartz/claude-sandbox-base:latest
 
 USER root
-RUN apt-get update && apt-get install -y python3 python3-pip
+RUN apt-get update && apt-get install -y \
+    python3 \
+    python3-pip \
+    && rm -rf /var/lib/apt/lists/*
 USER developer
 ```
 
-Then update `docker-compose.yml`:
-
+Update `docker-compose.yml`:
 ```yaml
 sandbox:
   build:
     context: .
     dockerfile: Dockerfile
-  # Remove or comment out the 'image:' line
+  # Comment out or remove the 'image:' line
 ```
 
-### Adding Whitelist Domains
+### Adding Whitelisted Domains
 
-Edit `whitelist.txt` to add domains. Common examples:
+Edit `whitelist.txt`. Common additions:
 
 ```text
-# Python packages
+# Python
 .pypi.org
 .pythonhosted.org
 files.pythonhosted.org
 
-# Go modules
+# Go
 .golang.org
 proxy.golang.org
 sum.golang.org
 
-# Rust crates
+# Rust
 .crates.io
 static.crates.io
 
-# .NET packages
+# .NET
 .nuget.org
 api.nuget.org
+
+# Ruby
+.rubygems.org
+
+# Container registries
+.docker.io
+.docker.com
+registry-1.docker.io
+production.cloudflare.docker.com
 ```
 
-## Credentials
+After editing, rebuild: `docker compose build proxy`
 
-The `docker-compose.yml` mounts two credential files directly from your host as read-only:
+### Enabling Docker-in-Docker
 
-| File | Mounted To | Purpose |
-|------|------------|---------|
-| `~/.claude/.credentials.json` | `/home/developer/.claude/.credentials.json:ro` | OAuth tokens for Anthropic API |
-| `~/.claude/settings.json` | `/home/developer/.claude/settings.json:ro` | Must contain `bypassPermissionsModeAccepted: true` |
+If Claude needs to build or run containers, use the Podman-enabled variant.
 
-**First-time setup**: Run `claude login` on your host machine before using the container.
+In `docker-compose.yml`, change the sandbox service to use `sandbox-podman`:
+```yaml
+services:
+  sandbox-podman:
+    image: ghcr.io/alennartz/claude-sandbox-base-podman:latest
+    # ... rest of config
+```
 
-### devcontainer.json Settings
+Or extend the Podman base in your Dockerfile:
+```dockerfile
+FROM ghcr.io/alennartz/claude-sandbox-base-podman:latest
+# Your additions...
+```
 
-The `devcontainer.json` includes `"remoteUser": "developer"` which ensures VS Code runs as the correct user with access to credentials. Do not remove this setting.
+**Security note:** The Podman variant requires `CAP_SYS_ADMIN`. Only use if you need container operations.
 
-## Security Model
+### Extension Patterns
 
-- **Network isolation**: All traffic forced through proxy
-- **Domain whitelist**: Only explicitly allowed domains are accessible
-- **No sudo**: Claude runs as unprivileged user
-- **Transparent**: No proxy configuration needed in tools
-- **Read-only credentials**: Container cannot modify host auth files
+**Python development:**
+```dockerfile
+FROM ghcr.io/alennartz/claude-sandbox-base:latest
+USER root
+RUN apt-get update && apt-get install -y python3 python3-pip python3-venv
+USER developer
+```
+
+**Node.js (already included):**
+The base image includes Node.js 22.
+
+**Go development:**
+```dockerfile
+FROM ghcr.io/alennartz/claude-sandbox-base:latest
+USER root
+RUN curl -fsSL https://go.dev/dl/go1.22.0.linux-amd64.tar.gz | tar -C /usr/local -xzf -
+ENV PATH="/usr/local/go/bin:${PATH}"
+USER developer
+```
+
+**Rust development:**
+```dockerfile
+FROM ghcr.io/alennartz/claude-sandbox-base:latest
+USER root
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
+USER developer
+```
+
+## How It Works
+
+- All network traffic goes through a Squid proxy with domain whitelisting
+- Only domains in `whitelist.txt` are accessible
+- Claude runs as unprivileged `developer` user (no sudo)
+- Host credentials mounted read-only
 
 ## Troubleshooting
 
-### Connection refused errors
-Check that the domain is in your `whitelist.txt` and rebuild the proxy:
-```bash
-docker compose build proxy
-```
+**Connection refused / timeouts:**
+Add the domain to `whitelist.txt` and rebuild: `docker compose build proxy`
 
-### Certificate errors
-The proxy intercepts HTTPS. If a tool does certificate pinning, it may fail.
-Most development tools work fine.
+**Certificate errors:**
+The proxy intercepts HTTPS. Tools with certificate pinning may fail (rare).
+
+**Claude not found:**
+Ensure Claude Code is installed on your host: `curl -fsSL https://claude.ai/install.sh | sh`
+
+## Files
+
+| File | Purpose |
+|------|---------|
+| `devcontainer.json` | VS Code container configuration |
+| `docker-compose.yml` | Container orchestration |
+| `whitelist.txt` | Allowed network domains |
