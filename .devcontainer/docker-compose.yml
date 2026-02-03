@@ -94,5 +94,47 @@ services:
       retries: 15
       start_period: 5s
 
+  # Kubernetes-enabled sandbox with K3s for K8s development
+  # Use this when you need both containers (Podman) AND Kubernetes
+  # SECURITY WARNING: Requires --privileged and cgroupns=host
+  # See docs/adr/007-kubernetes-support.md for security implications
+  sandbox-k8s:
+    build:
+      context: ../images/base-k8s
+    image: claude-sandbox-base-k8s:latest
+    network_mode: "service:proxy"
+    depends_on:
+      proxy:
+        condition: service_healthy
+    # SECURITY: Privileged mode required for K3s - see ADR-007
+    privileged: true
+    # SECURITY: Host cgroup namespace required for containerd
+    cgroup: host
+    environment:
+      - NODE_EXTRA_CA_CERTS=/etc/squid/ssl/squid-ca-cert.pem
+      - WORKSPACE_FOLDER=${LOCAL_WORKSPACE_FOLDER_BASENAME}
+      - KUBECONFIG=/home/developer/.kube/config
+    volumes:
+      - squid-ssl:/etc/squid/ssl:ro
+      - ..:/workspaces/${LOCAL_WORKSPACE_FOLDER_BASENAME}:cached
+      # Mount Claude binary directory (entrypoint creates symlink in ~/.local/bin)
+      - ${HOME}/.local/share/claude:/home/developer/.local/share/claude:ro
+      # Mount Claude config directly (RW)
+      - ${HOME}/.claude:/home/developer/.claude:cached
+      - ${HOME}/.claude.json:/home/developer/.claude.json:cached
+      # Mount git config for commits
+      - ${HOME}/.gitconfig:/home/developer/.gitconfig:ro
+      - ${HOME}/.git-credentials:/home/developer/.git-credentials:ro
+    # K8s entrypoint starts K3s then drops privileges
+    entrypoint: ["/bin/bash", "/usr/local/bin/k8s-entrypoint.sh"]
+    command: ["sleep", "infinity"]
+    healthcheck:
+      # Check both Claude binary AND K3s node ready
+      test: ["CMD-SHELL", "test -x /home/developer/.local/bin/claude && k3s kubectl --kubeconfig=/etc/rancher/k3s/k3s.yaml get nodes | grep -q Ready"]
+      interval: 5s
+      timeout: 10s
+      retries: 30
+      start_period: 90s
+
 volumes:
   squid-ssl:

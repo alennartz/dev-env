@@ -1,0 +1,27 @@
+# K3s server configuration for development sandbox
+# Minimal single-node cluster optimized for container development
+
+# Disable components not needed for development
+disable:
+  - traefik           # No ingress controller needed
+  - servicelb         # No load balancer needed
+  - metrics-server    # No metrics needed
+
+# Use host-gw flannel backend (simpler, no encapsulation)
+flannel-backend: host-gw
+
+# Disable cloud controller (no cloud provider)
+disable-cloud-controller: true
+
+# Write kubeconfig with permissions readable by developer user
+write-kubeconfig-mode: "0644"
+
+# Data directory
+data-dir: /var/lib/rancher/k3s
+
+# Disable network policy (simplifies networking)
+disable-network-policy: true
+
+# Use fuse-overlayfs snapshotter for nested container environment
+# (overlayfs doesn't work in nested containers)
+snapshotter: fuse-overlayfs
