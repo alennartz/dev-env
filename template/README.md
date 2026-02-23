@@ -24,9 +24,11 @@ If you're on Windows with Docker Desktop:
 3. Create settings file: `New-Item -Path "$env:USERPROFILE\.claude.json" -ItemType File -Force`
 4. Ensure git is configured: `git config --global user.name` and `git config --global user.email`
 
-The template uses a cross-platform `setup-env.js` script that detects your home directory automatically. No additional configuration needed — just "Reopen in Container" in VS Code.
+The template uses a cross-platform `setup-env.js` script that detects your home directory automatically.
 
-**Note:** The `claude-sandbox-bwrap.sh` script is Linux-only. On Windows, use the Docker container approach (this template) or the `claude-sandbox.ps1` script.
+**Important:** The template `docker-compose.yml` mounts Claude from `~/.local/share/claude/` (the shell installer layout). If you installed Claude via `npm install -g`, use `claude-sandbox.ps1` instead — it detects your npm install automatically. For VS Code Dev Containers, the shell installer layout is required.
+
+**Note:** The `claude-sandbox-bwrap.sh` script is Linux-only. On Windows, use `claude-sandbox.ps1` or this template (with the shell installer).
 
 ## Extensibility
 
