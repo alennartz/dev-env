@@ -12,9 +12,59 @@ A secure, network-isolated container for running Claude Code with `--dangerously
 
 ## Quick Start
 
-### Option 1: Use the Sandbox Script (Recommended)
+### Option 1: Bubblewrap Sandbox (Recommended)
 
-The easiest way to sandbox Claude for any repository:
+Runs Claude directly on the host with full access to your tools and configs, sandboxed via bubblewrap + overlay filesystem. Network is isolated through a minimal Docker container running Squid.
+
+**Requirements**: `bubblewrap`, `fuse-overlayfs`, `docker`, `nsenter` (util-linux)
+
+```bash
+sudo apt install bubblewrap fuse-overlayfs util-linux
+```
+
+**Usage**:
+
+```bash
+./claude-sandbox-bwrap.sh ~/myproject              # Sandbox a project
+./claude-sandbox-bwrap.sh ~/myproject -- --resume   # Pass args to Claude
+./claude-sandbox-bwrap.sh --status                  # Check network jail status
+./claude-sandbox-bwrap.sh --stop                    # Stop network jail
+```
+
+**How it works**:
+
+```text
+┌──────────────────────────────────────────────────────────────┐
+│  Host (your machine)                                         │
+│                                                              │
+│  ┌─────────────────────────────────────────────────────┐     │
+│  │  bwrap sandbox                                      │     │
+│  │  - Overlay of entire / (writes are ephemeral)       │     │
+│  │  - Workspace bind-mount (RW, persists)              │     │
+│  │  - ~/.claude bind-mount (RW, persists)              │     │
+│  │  - All host tools, configs, shell available         │     │
+│  └──────────────────────┬──────────────────────────────┘     │
+│                         │ nsenter --net                       │
+│  ┌──────────────────────▼──────────────────────────────┐     │
+│  │  Network jail (Docker container)                    │     │
+│  │  - iptables redirect all traffic to Squid           │     │
+│  │  - Squid enforces domain whitelist                  │     │
+│  │  - SSL bump for HTTPS inspection                    │     │
+│  └─────────────────────────────────────────────────────┘     │
+└──────────────────────────────────────────────────────────────┘
+```
+
+The overlay filesystem means Claude sees the entire host root filesystem but writes go to a temporary layer. Only workspace and `~/.claude` directories persist changes back to the host. The network jail container is reusable across sandbox sessions.
+
+**Whitelist**: Provide a domain whitelist via:
+- `$PWD/.devcontainer/whitelist.txt`
+- `~/.claude/whitelist.txt`
+- `$SCRIPT_DIR/local/whitelist.txt`
+- Or set `WHITELIST=/path/to/whitelist.txt`
+
+### Option 2: Docker Container Sandbox
+
+The easiest way to sandbox Claude for any repository using Docker containers:
 
 1. **Clone this repo** (one-time):
    ```bash
@@ -38,7 +88,7 @@ The script automatically:
 - Resolves whitelists from target repo, this repo, or image defaults
 - Manages container lifecycle (start, stop, status)
 
-### Option 2: Copy Template to Your Project
+### Option 3: Copy Template to Your Project
 
 For projects that need a permanent `.devcontainer/` setup:
 
@@ -65,6 +115,18 @@ For projects that need a permanent `.devcontainer/` setup:
 See [template/README.md](template/README.md) for customization options.
 
 ## Architecture
+
+### Bubblewrap Mode
+
+Uses the host filesystem directly via overlay, with network isolation from a minimal Docker container:
+
+- **Full host tools**: All host binaries, libraries, and configs available (no rebuilding dev environment)
+- **Ephemeral writes**: fuse-overlayfs on `/` makes all writes temporary except workspace and `~/.claude`
+- **Transparent proxy**: iptables in the network jail redirect all traffic through Squid (proxy-unaware tools work)
+- **No capabilities**: bwrap sandbox runs as regular user; only the network jail container has NET_ADMIN
+- **Same identity**: Runs as your host user with all environment variables preserved
+
+### Docker Container Mode
 
 ```text
 ┌─────────────────────────────────────────┐
@@ -114,13 +176,19 @@ The sandbox mounts credentials directly from your host as read-only files:
 ## Repository Structure
 
 ```text
-├── claude-sandbox.sh          # Launch script - sandbox Claude in any repo
+├── claude-sandbox-bwrap.sh    # Bubblewrap sandbox - uses host tools directly
+├── claude-sandbox.sh          # Docker container sandbox - any repo
 ├── images/                    # Published to GHCR
 │   ├── proxy/                 # Squid proxy with iptables
 │   │   ├── Dockerfile
 │   │   ├── squid.conf
 │   │   ├── whitelist.txt      # Minimal: only .anthropic.com
 │   │   └── proxy-entrypoint.sh
+│   ├── netjail/               # Minimal network jail for bwrap mode
+│   │   ├── Dockerfile
+│   │   ├── entrypoint.sh
+│   │   ├── squid.conf
+│   │   └── whitelist.txt
 │   ├── base/                  # Minimal sandbox
 │   │   ├── Dockerfile
 │   │   ├── trust-proxy-ca.sh
@@ -138,8 +206,7 @@ The sandbox mounts credentials directly from your host as read-only files:
 │   └── whitelist.txt          # Extended whitelist for this repo
 ├── docs/
 │   ├── adr/                   # Architecture Decision Records
-│   ├── security.md            # Security model documentation
-│   └── future-directions.md   # Alternative approaches for DinD
+│   └── security.md            # Security model documentation
 ├── .devcontainer/             # Uses local builds for this repo
 ├── .github/workflows/         # CI/CD for publishing images
 ├── Makefile                   # Build helpers
@@ -151,9 +218,11 @@ The sandbox mounts credentials directly from your host as read-only files:
 ### Building Locally
 
 ```bash
-make build-all     # Build all images
-make test          # Test the setup
-make clean         # Clean up
+make build-all      # Build all images (proxy, base, base-podman, netjail)
+make build-netjail  # Build network jail image only (for bwrap mode)
+make test           # Test Docker container setup
+make test-bwrap     # Test bubblewrap sandbox mode
+make clean          # Clean up
 ```
 
 ### Using VS Code

@@ -1,4 +1,4 @@
-.PHONY: build-proxy build-base build-base-podman build-all push test test-dind clean help
+.PHONY: build-proxy build-base build-base-podman build-netjail build-all push test test-dind test-bwrap clean help
 
 # Registry and owner for pushing images
 REGISTRY ?= ghcr.io
@@ -16,8 +16,10 @@ help:
 	@echo "  make build-proxy        Build proxy image"
 	@echo "  make build-base         Build base sandbox image"
 	@echo "  make build-base-podman  Build Podman-enabled sandbox image"
+	@echo "  make build-netjail      Build network jail image (for bwrap mode)"
 	@echo "  make test               Test both images (API connectivity + auth)"
 	@echo "  make test-dind          Test Docker-in-Docker with Podman image"
+	@echo "  make test-bwrap         Test bubblewrap sandbox mode"
 	@echo "  make clean              Remove containers and images"
 	@echo ""
 	@echo "Publishing (requires docker login to GHCR):"
@@ -38,8 +40,11 @@ build-base:
 build-base-podman: build-base
 	docker build $(CACHE_FLAG) -t claude-sandbox-base-podman:latest ./images/base-podman
 
+build-netjail:
+	docker build $(CACHE_FLAG) -t claude-netjail:latest ./images/netjail
+
 # Build all images
-build-all: build-proxy build-base build-base-podman
+build-all: build-proxy build-base build-base-podman build-netjail
 
 # Push to GHCR (requires docker login)
 push: build-all
@@ -85,8 +90,30 @@ test-dind: build-all
 	@echo "=== Stopping containers ==="
 	docker compose -f .devcontainer/docker-compose.yml down
 
+# Test bubblewrap sandbox mode
+test-bwrap: build-netjail
+	@echo "=== Testing bubblewrap sandbox mode ==="
+	@echo "Note: Requires bubblewrap, fuse-overlayfs installed on host"
+	@command -v bwrap >/dev/null || (echo "Error: bubblewrap not installed" && exit 1)
+	@command -v fuse-overlayfs >/dev/null || (echo "Error: fuse-overlayfs not installed" && exit 1)
+	@echo ""
+	@echo "Starting network jail..."
+	./claude-sandbox-bwrap.sh --stop 2>/dev/null || true
+	docker run -d --name claude-netjail --cap-add NET_ADMIN -v claude-netjail-ssl:/etc/squid/ssl claude-netjail:latest
+	@sleep 3
+	@echo ""
+	@echo "Testing network jail is running..."
+	docker exec claude-netjail pgrep squid && echo "  ✓ Squid running" || (echo "  ✗ Squid not running" && exit 1)
+	@echo ""
+	@echo "Stopping network jail..."
+	./claude-sandbox-bwrap.sh --stop
+	@echo ""
+	@echo "=== Basic tests passed ==="
+	@echo "To run full test: ./claude-sandbox-bwrap.sh ~/some-project"
+
 # Clean up
 clean:
 	docker compose -f .devcontainer/docker-compose.yml down -v 2>/dev/null || true
-	docker rmi claude-sandbox-proxy:latest claude-sandbox-base:latest claude-sandbox-base-podman:latest 2>/dev/null || true
+	./claude-sandbox-bwrap.sh --stop 2>/dev/null || true
+	docker rmi claude-sandbox-proxy:latest claude-sandbox-base:latest claude-sandbox-base-podman:latest claude-netjail:latest 2>/dev/null || true
 	@echo "Cleaned up containers and images"

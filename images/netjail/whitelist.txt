@@ -1,0 +1,5 @@
+# Minimal whitelist - only Anthropic API
+# Users should provide their own whitelist via volume mount
+
+.anthropic.com
+.claude.ai

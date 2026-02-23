@@ -6,7 +6,8 @@ This repository provides a secure, sandboxed Docker development container for ru
 
 The repo is organized into these main areas:
 
-- **`claude-sandbox.sh`** - Launch script to sandbox Claude in any repository
+- **`claude-sandbox-bwrap.sh`** - Bubblewrap sandbox using host tools directly + network jail
+- **`claude-sandbox.sh`** - Docker container sandbox for any repository
 - **`images/`** - Published to GHCR (reusable by other repos)
 - **`template/`** - Files users copy to their project's `.devcontainer/`
 - **`local/`** - Extended whitelist for this repo's development
@@ -18,13 +19,19 @@ The `.devcontainer/` folder is minimal and references the local builds.
 
 ```text
 dev-env/
-├── claude-sandbox.sh          # Launch script - sandbox Claude in any repo
+├── claude-sandbox-bwrap.sh    # Bubblewrap sandbox - host tools + network jail
+├── claude-sandbox.sh          # Docker container sandbox - any repo
 ├── images/                    # Published to GHCR
 │   ├── proxy/
 │   │   ├── Dockerfile         # Squid proxy with SSL bump
 │   │   ├── squid.conf         # Transparent proxy config
 │   │   ├── whitelist.txt      # MINIMAL: only .anthropic.com
 │   │   └── proxy-entrypoint.sh
+│   ├── netjail/
+│   │   ├── Dockerfile         # Minimal network jail (Alpine + squid + iptables)
+│   │   ├── entrypoint.sh      # CA cert gen, iptables setup, squid launch
+│   │   ├── squid.conf         # Transparent proxy config
+│   │   └── whitelist.txt      # MINIMAL: only .anthropic.com
 │   ├── base/
 │   │   ├── Dockerfile         # Debian slim (~418MB)
 │   │   ├── trust-proxy-ca.sh
@@ -48,8 +55,7 @@ dev-env/
 │   │   ├── 004-replace-seccomp-unconfined.md
 │   │   ├── 005-no-new-privileges-incompatible.md
 │   │   └── 006-adopt-podman-rootless.md
-│   ├── security.md            # Security model documentation
-│   └── future-directions.md   # Alternative DinD approaches
+│   └── security.md            # Security model documentation
 ├── .devcontainer/             # Uses local builds
 │   ├── devcontainer.json
 │   └── docker-compose.yml
@@ -76,11 +82,33 @@ dev-env/
 - Non-root `developer` user with **NO SUDO**
 - PATH includes `~/.local/bin` for mounted Claude binary
 
+**`images/netjail/`** - Network jail for bubblewrap mode:
+- Minimal Alpine image (~22MB) with squid, iptables, openssl
+- Provides a network namespace with transparent Squid proxy
+- Host processes join this namespace via `nsenter`
+- iptables redirect HTTP/HTTPS to Squid, reject all other outbound
+- CA certificate generated on first run (persisted in Docker volume)
+
 **`images/base-podman/`** - Docker-in-Docker variant:
 - Extends base image with Podman, crun, fuse-overlayfs
 - Requires elevated capabilities (CAP_SYS_ADMIN) - see ADR-006
 - Includes podman-wrapper.sh for compose compatibility
 - Docker CLI alias (`docker` → `podman`)
+
+### Bubblewrap Sandbox (claude-sandbox-bwrap.sh)
+
+An alternative to the Docker container approach that runs Claude directly on the host with full access to all host tools and configurations. Uses bubblewrap for filesystem isolation and a minimal Docker container (network jail) for network isolation.
+
+**Architecture**:
+- `fuse-overlayfs` on `/` with ephemeral tmpfs upper layer (writes don't affect host)
+- Workspace and `~/.claude` bind-mounted through the overlay for persistence
+- `nsenter --net` joins the network jail's namespace for transparent proxy
+- All host environment variables passed through
+- Proxy CA certificate injected into overlay's system CA bundle
+
+**Requirements**: bubblewrap, fuse-overlayfs, docker, nsenter (util-linux)
+
+**sudo usage**: The overlay mount on `/` requires `sudo fuse-overlayfs` due to copy-up operations on WSL2/ext4. The `nsenter` also requires sudo to access `/proc/PID/ns/net`. Inside the sandbox, Claude runs as the regular user.
 
 ### Template (template/)
 
@@ -199,11 +227,13 @@ Host settings are used directly (not overridden by the container). To enable byp
 ### Build Commands
 
 ```bash
-make build-all      # Build all images (proxy, base, base-podman)
+make build-all      # Build all images (proxy, base, base-podman, netjail)
 make build-proxy    # Build proxy only
 make build-base     # Build base sandbox only
 make build-base-podman  # Build Podman variant only
-make test           # Test the setup
+make build-netjail  # Build network jail only (for bwrap mode)
+make test           # Test Docker container setup
+make test-bwrap     # Test bubblewrap sandbox mode
 make clean          # Clean up
 ```
 
