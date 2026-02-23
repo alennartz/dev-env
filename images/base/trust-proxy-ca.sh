@@ -53,7 +53,15 @@ elif [ "${CLAUDE_INSTALL_TYPE:-}" = "npm" ] && [ "$(id -u)" = "0" ]; then
     if [ -d "$NPM_DIR" ]; then
         # Discover entry point from package.json bin field
         ENTRY=$(node -e "const p=require('$NPM_DIR/package.json'); const b=Object.values(p.bin||{})[0]||p.main||'cli.mjs'; console.log(b)" 2>/dev/null || echo "cli.mjs")
+        # Validate entry point - reject path traversal and shell metacharacters
+        case "$ENTRY" in
+            *..* | *\;* | *\|* | *\&* | *\`* | *\$*)
+                echo "WARNING: Suspicious entry point '$ENTRY' in package.json, falling back to cli.mjs"
+                ENTRY="cli.mjs"
+                ;;
+        esac
         echo "Setting up Claude binary (npm package, entry: $ENTRY)..."
+        # Generate wrapper script - $NPM_DIR and $ENTRY expand now, \$@ stays literal
         cat > "$CLAUDE_BIN" <<WRAPPER
 #!/bin/sh
 exec node "$NPM_DIR/$ENTRY" "\$@"

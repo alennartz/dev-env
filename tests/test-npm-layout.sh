@@ -1,6 +1,7 @@
 #!/bin/bash
 # Test that trust-proxy-ca.sh handles npm-installed Claude
 set -e
+cleanup() { rm -rf "$TEST_TMPDIR" 2>/dev/null; }
 
 echo "=== Testing npm layout entrypoint ==="
 
@@ -8,23 +9,22 @@ echo "=== Testing npm layout entrypoint ==="
 docker build -t claude-sandbox-base:test ./images/base
 
 # Create a fake npm package directory
-TMPDIR=$(mktemp -d)
-mkdir -p "$TMPDIR/npm-pkg"
-cat > "$TMPDIR/npm-pkg/package.json" <<'EOF'
+TEST_TMPDIR=$(mktemp -d)
+trap cleanup EXIT
+mkdir -p "$TEST_TMPDIR/npm-pkg"
+cat > "$TEST_TMPDIR/npm-pkg/package.json" <<'EOF'
 {"name":"@anthropic-ai/claude-code","bin":{"claude":"cli.mjs"}}
 EOF
-cat > "$TMPDIR/npm-pkg/cli.mjs" <<'EOF'
+cat > "$TEST_TMPDIR/npm-pkg/cli.mjs" <<'EOF'
 console.log("claude-npm-test-ok");
 EOF
 
 # Run the entrypoint with npm layout
 OUTPUT=$(docker run --rm \
     -e CLAUDE_INSTALL_TYPE=npm \
-    -v "$TMPDIR/npm-pkg:/home/developer/.local/share/claude-npm:ro" \
+    -v "$TEST_TMPDIR/npm-pkg:/home/developer/.local/share/claude-npm:ro" \
     claude-sandbox-base:test \
     /bin/sh -c "/usr/local/bin/trust-proxy-ca.sh gosu developer /home/developer/.local/bin/claude 2>&1 || true; gosu developer /home/developer/.local/bin/claude 2>&1 || true")
-
-rm -rf "$TMPDIR"
 
 if echo "$OUTPUT" | grep -q "claude-npm-test-ok"; then
     echo "  PASS: npm layout produces working claude binary"
