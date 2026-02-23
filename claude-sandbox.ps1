@@ -193,6 +193,11 @@ function Resolve-Whitelist {
 }
 
 # =============================================================================
+# Path Helpers
+# =============================================================================
+function Convert-ToForwardSlash { param([string]$Path) return $Path -replace '\\', '/' }
+
+# =============================================================================
 # Compose File Generation
 # =============================================================================
 function New-ComposeFile {
@@ -219,23 +224,29 @@ function New-ComposeFile {
     # Build whitelist volume line
     $whitelistVolume = ''
     if ($WhitelistPath) {
-        $whitelistVolume = "      - ${WhitelistPath}:/etc/squid/whitelist.txt:ro"
+        $whitelistVolume = "      - $(Convert-ToForwardSlash $WhitelistPath):/etc/squid/whitelist.txt:ro"
     }
 
     # Build Claude binary mount
     if ($Claude.Type -eq 'npm') {
-        $claudeMount = "      - $($Claude.Path):/home/developer/.local/share/claude-npm:ro"
+        $claudeMount = "      - $(Convert-ToForwardSlash $Claude.Path):/home/developer/.local/share/claude-npm:ro"
         $claudeEnvLine = '      - CLAUDE_INSTALL_TYPE=npm'
     } else {
-        $claudeMount = "      - $($Claude.Path):/home/developer/.local/share/claude:ro"
+        $claudeMount = "      - $(Convert-ToForwardSlash $Claude.Path):/home/developer/.local/share/claude:ro"
         $claudeEnvLine = ''
     }
 
     # Build git credentials mount
     $gitCredsVolume = ''
     if ($Creds.GitCredentials) {
-        $gitCredsVolume = "      - $($Creds.GitCredentials):/home/developer/.git-credentials:ro"
+        $gitCredsVolume = "      - $(Convert-ToForwardSlash $Creds.GitCredentials):/home/developer/.git-credentials:ro"
     }
+
+    # Convert paths for YAML embedding
+    $targetRepoFwd = Convert-ToForwardSlash $TargetRepo
+    $claudeDirFwd = Convert-ToForwardSlash $Creds.ClaudeDir
+    $claudeJsonFwd = Convert-ToForwardSlash $Creds.ClaudeJson
+    $gitConfigFwd = Convert-ToForwardSlash $Creds.GitConfig
 
     # Generate compose file
     $compose = @"
@@ -270,11 +281,11 @@ $whitelistVolume
 $claudeEnvLine
     volumes:
       - squid-ssl:/etc/squid/ssl:ro
-      - ${TargetRepo}:/workspaces/`${LOCAL_WORKSPACE_FOLDER_BASENAME}:cached
+      - ${targetRepoFwd}:/workspaces/`${LOCAL_WORKSPACE_FOLDER_BASENAME}:cached
 $claudeMount
-      - $($Creds.ClaudeDir):/home/developer/.claude:cached
-      - $($Creds.ClaudeJson):/home/developer/.claude.json:cached
-      - $($Creds.GitConfig):/home/developer/.gitconfig:ro
+      - ${claudeDirFwd}:/home/developer/.claude:cached
+      - ${claudeJsonFwd}:/home/developer/.claude.json:cached
+      - ${gitConfigFwd}:/home/developer/.gitconfig:ro
 $gitCredsVolume
     entrypoint: ["/bin/sh", "/usr/local/bin/trust-proxy-ca.sh"]
     command: ["sleep", "infinity"]
@@ -290,11 +301,11 @@ volumes:
 "@
 
     $composeFile = Join-Path $TempDir 'docker-compose.yml'
-    Set-Content -Path $composeFile -Value $compose -NoNewline
+    Set-Content -Path $composeFile -Value $compose
 
     # Generate .env file
     $envContent = "LOCAL_WORKSPACE_FOLDER_BASENAME=$WorkspaceName"
-    Set-Content -Path (Join-Path $TempDir '.env') -Value $envContent -NoNewline
+    Set-Content -Path (Join-Path $TempDir '.env') -Value $envContent
 
     return $composeFile
 }
@@ -303,8 +314,8 @@ volumes:
 # Docker Compose Wrapper
 # =============================================================================
 function Invoke-Dc {
-    param([string]$ComposeFile, [Parameter(ValueFromRemainingArguments)][string[]]$Args)
-    & docker compose -p $ProjectName -f $ComposeFile @Args
+    param([string]$ComposeFile, [Parameter(ValueFromRemainingArguments)][string[]]$DcArgs)
+    & docker compose -p $ProjectName -f $ComposeFile @DcArgs
 }
 
 # =============================================================================
@@ -349,8 +360,8 @@ function Start-Containers {
 
     Write-Log "Waiting for sandbox to be ready..."
     for ($i = 1; $i -le 30; $i++) {
-        $ps = Invoke-Dc $ComposeFile ps 2>$null | Out-String
-        if ($ps -match 'sandbox.*\(healthy\)' -and $ps -notmatch 'proxy.*\(healthy\).*sandbox') {
+        $lines = Invoke-Dc $ComposeFile ps 2>$null | Where-Object { $_ -match 'sandbox' -and $_ -match '\(healthy\)' -and $_ -notmatch 'proxy' }
+        if ($lines) {
             Write-Log "Sandbox is ready"
             return
         }
@@ -442,5 +453,6 @@ switch ($PSCmdlet.ParameterSetName) {
 
         Write-Log "Launching Claude Code in sandbox..."
         Invoke-Dc $composeFile exec -u developer -w "/workspaces/$WorkspaceName" -it sandbox claude --dangerously-skip-permissions
+        if ($LASTEXITCODE) { exit $LASTEXITCODE }
     }
 }
