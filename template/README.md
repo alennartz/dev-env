@@ -15,6 +15,19 @@ claude login
 echo '{"bypassPermissionsModeAccepted": true}' > ~/.claude/settings.json
 ```
 
+### Windows Setup
+
+If you're on Windows with Docker Desktop:
+
+1. Install Claude Code: `npm install -g @anthropic-ai/claude-code`
+2. Run `claude login` to authenticate
+3. Create settings file: `New-Item -Path "$env:USERPROFILE\.claude.json" -ItemType File -Force`
+4. Ensure git is configured: `git config --global user.name` and `git config --global user.email`
+
+The template uses a cross-platform `setup-env.js` script that detects your home directory automatically. No additional configuration needed — just "Reopen in Container" in VS Code.
+
+**Note:** The `claude-sandbox-bwrap.sh` script is Linux-only. On Windows, use the Docker container approach (this template) or the `claude-sandbox.ps1` script.
+
 ## Extensibility
 
 ### Adding Tools
@@ -143,7 +156,9 @@ Add the domain to `whitelist.txt` and rebuild: `docker compose build proxy`
 The proxy intercepts HTTPS. Tools with certificate pinning may fail (rare).
 
 **Claude not found:**
-Ensure Claude Code is installed on your host: `curl -fsSL https://claude.ai/install.sh | sh`
+Ensure Claude Code is installed on your host:
+- Linux/macOS: `curl -fsSL https://claude.ai/install.sh | sh`
+- Windows: `npm install -g @anthropic-ai/claude-code`
 
 ## Files
 
