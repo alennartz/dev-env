@@ -29,7 +29,7 @@ if (!content.includes('LOCAL_WORKSPACE_FOLDER_BASENAME=my-project')) {
 }
 
 // Check HOME is set to os.homedir()
-const home = os.homedir();
+const home = os.homedir().replace(/\\/g, '/');
 if (!content.includes(`HOME=${home}`)) {
     console.log(`FAIL: expected HOME=${home}`);
     console.log('Got:', content);

@@ -10,7 +10,7 @@ const envFile = path.join(__dirname, '.env');
 
 const lines = [
     `LOCAL_WORKSPACE_FOLDER_BASENAME=${workspaceName}`,
-    `HOME=${os.homedir()}`,
+    `HOME=${os.homedir().replace(/\\/g, '/')}`,
 ];
 
 fs.writeFileSync(envFile, lines.join('\n') + '\n');
