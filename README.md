@@ -80,6 +80,16 @@ The cross-platform option. Runs Claude inside a Docker container with a companio
    alias claude-sandbox='~/dev-env/claude-sandbox.sh'
    ```
 
+   **On Windows (PowerShell):**
+   ```powershell
+   git clone https://github.com/alennartz/dev-env.git ~/dev-env
+   ```
+
+   Add to your PowerShell profile (`$PROFILE`):
+   ```powershell
+   function claude-sandbox { & "$HOME\dev-env\claude-sandbox.ps1" @args }
+   ```
+
 3. **Run Claude in any project**:
    ```bash
    cd ~/your-project
@@ -120,15 +130,16 @@ See [template/README.md](template/README.md) for customization options.
 
 ## Choosing an Approach
 
-| | Bubblewrap (Linux only) | Docker Container (any OS) |
-|---|---|---|
-| **Host tools available** | All — overlays host `/` directly | None — must install in container |
-| **Shell/configs** | Your shell, dotfiles, aliases | Minimal bash, no host configs |
-| **Setup per project** | Whitelist file only | Dockerfile or image customization |
-| **Network isolation** | Transparent proxy (iptables) | Transparent proxy (iptables) |
-| **Filesystem isolation** | Overlay — writes are ephemeral | Container — writes are ephemeral |
-| **Resource overhead** | ~22MB network jail container | ~418MB+ sandbox container |
-| **Platform** | Linux (kernel namespaces required) | Linux, macOS, Windows (via Docker) |
+| | Bubblewrap (Linux only) | Docker Container (Linux, macOS) | Docker Container (Windows) |
+|---|---|---|---|
+| **Host tools available** | All — overlays host `/` directly | None — must install in container | None — must install in container |
+| **Shell/configs** | Your shell, dotfiles, aliases | Minimal bash, no host configs | Minimal bash, no host configs |
+| **Setup per project** | Whitelist file only | Dockerfile or image customization | Dockerfile or image customization |
+| **Network isolation** | Transparent proxy (iptables) | Transparent proxy (iptables) | Transparent proxy (iptables) |
+| **Filesystem isolation** | Overlay — writes are ephemeral | Container — writes are ephemeral | Container — writes are ephemeral |
+| **Resource overhead** | ~22MB network jail container | ~418MB+ sandbox container | ~418MB+ sandbox container |
+| **Script** | `claude-sandbox-bwrap.sh` | `claude-sandbox.sh` | `claude-sandbox.ps1` |
+| **Platform** | Linux only | Linux, macOS (bash) | Windows (PowerShell 5.1+) |
 
 Both approaches enforce the same network security model: all traffic is forced through a Squid transparent proxy that only allows whitelisted domains. The difference is in how the sandbox environment is constructed.
 
