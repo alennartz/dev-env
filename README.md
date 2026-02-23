@@ -12,9 +12,13 @@ A secure, network-isolated container for running Claude Code with `--dangerously
 
 ## Quick Start
 
-### Option 1: Bubblewrap Sandbox (Recommended)
+### Option 1: Bubblewrap Sandbox (Recommended — Linux only)
 
 Runs Claude directly on the host with full access to your tools and configs, sandboxed via bubblewrap + overlay filesystem. Network is isolated through a minimal Docker container running Squid.
+
+This is the lightweight option: instead of rebuilding your entire dev environment inside a container, it overlays the host root filesystem so all your existing tools, language runtimes, shell configs, and credentials work out of the box. The only Docker container involved is a ~22MB network jail for proxy enforcement.
+
+> **Linux only.** This mode depends on Linux kernel namespaces (mount, PID, network), `bubblewrap`, `fuse-overlayfs`, and `nsenter` — none of which are available on macOS or Windows. On those platforms, use the [Docker Container Sandbox](#option-2-docker-container-sandbox) instead.
 
 **Requirements**: `bubblewrap`, `fuse-overlayfs`, `docker`, `nsenter` (util-linux)
 
@@ -62,9 +66,9 @@ The overlay filesystem means Claude sees the entire host root filesystem but wri
 - `$SCRIPT_DIR/local/whitelist.txt`
 - Or set `WHITELIST=/path/to/whitelist.txt`
 
-### Option 2: Docker Container Sandbox
+### Option 2: Docker Container Sandbox (Linux, macOS, Windows)
 
-The easiest way to sandbox Claude for any repository using Docker containers:
+The cross-platform option. Runs Claude inside a Docker container with a companion Squid proxy container for network isolation. Requires rebuilding your dev toolchain inside the container, but works anywhere Docker runs.
 
 1. **Clone this repo** (one-time):
    ```bash
@@ -113,6 +117,20 @@ For projects that need a permanent `.devcontainer/` setup:
    ```
 
 See [template/README.md](template/README.md) for customization options.
+
+## Choosing an Approach
+
+| | Bubblewrap (Linux only) | Docker Container (any OS) |
+|---|---|---|
+| **Host tools available** | All — overlays host `/` directly | None — must install in container |
+| **Shell/configs** | Your shell, dotfiles, aliases | Minimal bash, no host configs |
+| **Setup per project** | Whitelist file only | Dockerfile or image customization |
+| **Network isolation** | Transparent proxy (iptables) | Transparent proxy (iptables) |
+| **Filesystem isolation** | Overlay — writes are ephemeral | Container — writes are ephemeral |
+| **Resource overhead** | ~22MB network jail container | ~418MB+ sandbox container |
+| **Platform** | Linux (kernel namespaces required) | Linux, macOS, Windows (via Docker) |
+
+Both approaches enforce the same network security model: all traffic is forced through a Squid transparent proxy that only allows whitelisted domains. The difference is in how the sandbox environment is constructed.
 
 ## Architecture
 
