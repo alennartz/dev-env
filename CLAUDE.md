@@ -20,6 +20,7 @@ The `.devcontainer/` folder is minimal and references the local builds.
 ```text
 dev-env/
 ├── claude-sandbox-bwrap.sh    # Bubblewrap sandbox - host tools + network jail
+├── claude-sandbox.ps1         # PowerShell sandbox - Windows + Docker Desktop
 ├── claude-sandbox.sh          # Docker container sandbox - any repo
 ├── images/                    # Published to GHCR
 │   ├── proxy/
@@ -43,6 +44,7 @@ dev-env/
 ├── template/                  # Users copy this to their .devcontainer/
 │   ├── devcontainer.json
 │   ├── docker-compose.yml     # References GHCR images
+│   ├── setup-env.js           # Node helper: resolves Claude paths cross-platform
 │   ├── whitelist.txt          # Example with common domains
 │   └── README.md
 ├── local/                     # Local development files
@@ -56,6 +58,9 @@ dev-env/
 │   │   ├── 005-no-new-privileges-incompatible.md
 │   │   └── 006-adopt-podman-rootless.md
 │   └── security.md            # Security model documentation
+├── tests/
+│   ├── test-npm-layout.sh     # Verify npm-global Claude mount layout
+│   └── test-setup-env.js      # Unit tests for setup-env.js
 ├── .devcontainer/             # Uses local builds
 │   ├── devcontainer.json
 │   └── docker-compose.yml
@@ -109,6 +114,14 @@ An alternative to the Docker container approach that runs Claude directly on the
 **Requirements**: bubblewrap, fuse-overlayfs, docker, nsenter (util-linux)
 
 **sudo usage**: The overlay mount on `/` requires `sudo fuse-overlayfs` due to copy-up operations on WSL2/ext4. The `nsenter` also requires sudo to access `/proc/PID/ns/net`. Inside the sandbox, Claude runs as the regular user.
+
+### Windows Support (claude-sandbox.ps1)
+
+PowerShell equivalent of `claude-sandbox.sh` for Windows-native developers using Docker Desktop. Discovers Claude installed via npm (`npm root -g`) or the shell installer, resolves credentials from `$env:USERPROFILE`, and generates compose files in `$env:TEMP`.
+
+The container entrypoint (`trust-proxy-ca.sh`) handles both install layouts:
+- Shell installer: symlinks from `versions/<ver>/` (existing behavior)
+- npm global: creates a wrapper script that runs `node <package>/cli.mjs`
 
 ### Template (template/)
 
