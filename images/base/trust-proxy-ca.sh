@@ -47,6 +47,22 @@ if [ -d "$CLAUDE_DIR/versions" ] && [ "$(id -u)" = "0" ]; then
     else
         echo "WARNING: No Claude versions found in $CLAUDE_DIR/versions"
     fi
+# npm global install layout (Windows / npm i -g @anthropic-ai/claude-code)
+elif [ "${CLAUDE_INSTALL_TYPE:-}" = "npm" ] && [ "$(id -u)" = "0" ]; then
+    NPM_DIR="/home/developer/.local/share/claude-npm"
+    if [ -d "$NPM_DIR" ]; then
+        # Discover entry point from package.json bin field
+        ENTRY=$(node -e "const p=require('$NPM_DIR/package.json'); const b=Object.values(p.bin||{})[0]||p.main||'cli.mjs'; console.log(b)" 2>/dev/null || echo "cli.mjs")
+        echo "Setting up Claude binary (npm package, entry: $ENTRY)..."
+        cat > "$CLAUDE_BIN" <<WRAPPER
+#!/bin/sh
+exec node "$NPM_DIR/$ENTRY" "\$@"
+WRAPPER
+        chmod +x "$CLAUDE_BIN"
+        chown "$TARGET_USER:$TARGET_USER" "$CLAUDE_BIN"
+    else
+        echo "WARNING: CLAUDE_INSTALL_TYPE=npm but no package found at $NPM_DIR"
+    fi
 fi
 
 # Drop privileges and exec command
