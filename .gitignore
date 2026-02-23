@@ -29,3 +29,6 @@ Session.vim
 
 # Generated devcontainer env file
 .devcontainer/.env
+
+# Git worktrees
+.worktrees/
