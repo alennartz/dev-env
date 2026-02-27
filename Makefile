@@ -1,4 +1,4 @@
-.PHONY: build-proxy build-base build-base-podman build-netjail build-all push test test-dind test-bwrap clean help
+.PHONY: build-proxy build-base build-base-podman build-netjail build-all push test test-dind test-bwrap test-macos clean help
 
 # Registry and owner for pushing images
 REGISTRY ?= ghcr.io
@@ -20,6 +20,7 @@ help:
 	@echo "  make test               Test both images (API connectivity + auth)"
 	@echo "  make test-dind          Test Docker-in-Docker with Podman image"
 	@echo "  make test-bwrap         Test bubblewrap sandbox mode"
+	@echo "  make test-macos         Test macOS sandbox mode (macOS only)"
 	@echo "  make clean              Remove containers and images"
 	@echo ""
 	@echo "Publishing (requires docker login to GHCR):"
@@ -111,9 +112,37 @@ test-bwrap: build-netjail
 	@echo "=== Basic tests passed ==="
 	@echo "To run full test: ./claude-sandbox-bwrap.sh ~/some-project"
 
+# Test macOS sandbox mode
+test-macos: build-netjail
+	@echo "=== Testing macOS sandbox mode ==="
+	@test "$$(uname -s)" = "Darwin" || (echo "Error: macOS only" && exit 1)
+	@echo ""
+	@echo "Starting network jail (port-mapped)..."
+	./claude-sandbox-macos.sh --stop 2>/dev/null || true
+	docker run -d --name claude-netjail-macos --cap-add NET_ADMIN \
+		-p 127.0.0.1:3128:3128 -p 127.0.0.1:3129:3129 \
+		-v claude-netjail-ssl:/etc/squid/ssl claude-netjail:latest
+	@sleep 3
+	@echo ""
+	@echo "Testing network jail is running..."
+	docker exec claude-netjail-macos pgrep squid && echo "  ✓ Squid running" || (echo "  ✗ Squid not running" && exit 1)
+	@echo ""
+	@echo "Testing Squid is listening on mapped ports..."
+	@curl -sf --max-time 2 -o /dev/null http://127.0.0.1:3128/ 2>/dev/null; \
+		if [ $$? -ne 0 ] && [ $$? -ne 56 ]; then \
+			echo "  ✗ Port 3128 not responding"; exit 1; \
+		else echo "  ✓ Port 3128 responding"; fi
+	@echo ""
+	@echo "Stopping network jail..."
+	./claude-sandbox-macos.sh --stop
+	@echo ""
+	@echo "=== Basic tests passed ==="
+	@echo "To run full test: ./claude-sandbox-macos.sh ~/some-project"
+
 # Clean up
 clean:
 	docker compose -f .devcontainer/docker-compose.yml down -v 2>/dev/null || true
 	./claude-sandbox-bwrap.sh --stop 2>/dev/null || true
+	./claude-sandbox-macos.sh --stop 2>/dev/null || true
 	docker rmi claude-sandbox-proxy:latest claude-sandbox-base:latest claude-sandbox-base-podman:latest claude-netjail:latest 2>/dev/null || true
 	@echo "Cleaned up containers and images"

@@ -6,7 +6,8 @@ This repository provides a secure, sandboxed Docker development container for ru
 
 The repo is organized into these main areas:
 
-- **`claude-sandbox-bwrap.sh`** - Bubblewrap sandbox using host tools directly + network jail
+- **`claude-sandbox-bwrap.sh`** - Bubblewrap sandbox using host tools directly + network jail (Linux)
+- **`claude-sandbox-macos.sh`** - FUSE-T overlay + Seatbelt + pf sandbox using host tools directly (macOS)
 - **`claude-sandbox.sh`** - Docker container sandbox for any repository
 - **`images/`** - Published to GHCR (reusable by other repos)
 - **`template/`** - Files users copy to their project's `.devcontainer/`
@@ -19,7 +20,8 @@ The `.devcontainer/` folder is minimal and references the local builds.
 
 ```text
 dev-env/
-├── claude-sandbox-bwrap.sh    # Bubblewrap sandbox - host tools + network jail
+├── claude-sandbox-bwrap.sh    # Bubblewrap sandbox - host tools + network jail (Linux)
+├── claude-sandbox-macos.sh    # FUSE-T overlay + Seatbelt + pf sandbox (macOS)
 ├── claude-sandbox.ps1         # PowerShell sandbox - Windows + Docker Desktop
 ├── claude-sandbox.sh          # Docker container sandbox - any repo
 ├── images/                    # Published to GHCR
@@ -56,11 +58,18 @@ dev-env/
 │   │   ├── 003-reject-privileged-flag.md
 │   │   ├── 004-replace-seccomp-unconfined.md
 │   │   ├── 005-no-new-privileges-incompatible.md
-│   │   └── 006-adopt-podman-rootless.md
+│   │   ├── 006-adopt-podman-rootless.md
+│   │   └── 007-macos-seatbelt-pf-sandbox.md
 │   └── security.md            # Security model documentation
 ├── tests/
 │   ├── test-npm-layout.sh     # Verify npm-global Claude mount layout
 │   └── test-setup-env.js      # Unit tests for setup-env.js
+├── cmd/
+│   └── overlay-fuse/          # Go FUSE overlay filesystem for macOS sandbox
+│       ├── main.go            # Entry point, CLI args, signal handling
+│       ├── overlay.go         # Overlay logic: copy-up, whiteouts, bind-through
+│       ├── go.mod
+│       └── go.sum
 ├── .devcontainer/             # Uses local builds
 │   ├── devcontainer.json
 │   └── docker-compose.yml
@@ -87,10 +96,10 @@ dev-env/
 - Non-root `developer` user with **NO SUDO**
 - PATH includes `~/.local/bin` for mounted Claude binary
 
-**`images/netjail/`** - Network jail for bubblewrap mode:
+**`images/netjail/`** - Network jail for bwrap and macOS modes:
 - Minimal Alpine image (~22MB) with squid, iptables, openssl
-- Provides a network namespace with transparent Squid proxy
-- Host processes join this namespace via `nsenter`
+- Linux (bwrap): provides a network namespace; host processes join via `nsenter`
+- macOS: port-mapped to localhost; pf redirects traffic to Squid
 - iptables redirect HTTP/HTTPS to Squid, reject all other outbound
 - CA certificate generated on first run (persisted in Docker volume)
 
@@ -114,6 +123,39 @@ An alternative to the Docker container approach that runs Claude directly on the
 **Requirements**: bubblewrap, fuse-overlayfs, docker, nsenter (util-linux)
 
 **sudo usage**: The overlay mount on `/` requires `sudo fuse-overlayfs` due to copy-up operations on WSL2/ext4. The `nsenter` also requires sudo to access `/proc/PID/ns/net`. Inside the sandbox, Claude runs as the regular user.
+
+### macOS Sandbox (claude-sandbox-macos.sh)
+
+The macOS equivalent of the bubblewrap sandbox. Runs Claude natively with full access to host tools (Homebrew, shell config, etc.) while providing network isolation and ephemeral filesystem writes.
+
+**Architecture**:
+- FUSE-T overlay filesystem (`cmd/overlay-fuse/`) provides ephemeral writes — writes outside workspace/config go to a tmpdir and are discarded on exit
+- pf (packet filter) redirects HTTP/HTTPS to localhost Squid via `rdr pass` rules
+- Docker netjail container (same image as Linux) port-mapped to `127.0.0.1:3128/3129`
+- Seatbelt (`sandbox-exec`) confines file access to the overlay mount
+- Proxy CA certificate injected into the overlay's cert bundle
+- Child processes (MCP servers) inherit all constraints
+
+**FUSE-T Overlay** (`cmd/overlay-fuse/`):
+- Go binary using hanwen/go-fuse targeting FUSE-T's libfuse-compatible API
+- Lower layer: host `/` (read-only passthrough)
+- Upper layer: tmpdir (ephemeral, discarded on exit)
+- Bind-through paths: workspace and `~/.claude` write directly to host
+- Standard overlayfs whiteout convention (`.wh.*` files) for deletions
+- Copy-up on first write to a lower-layer file
+
+**Requirements**: macOS 13+ (Ventura), Docker Desktop, FUSE-T (`brew install fuse-t`)
+
+**Building the overlay binary**:
+```bash
+cd cmd/overlay-fuse && go build -o overlay-fuse .
+```
+
+**Fallback**: Set `NO_OVERLAY=1` to run without the overlay (Seatbelt-only write confinement, no ephemeral writes).
+
+**sudo usage**: `pfctl` requires root to load/flush pf rules. Rules are scoped to a named anchor (`claude-sandbox`) and cleaned up on exit.
+
+See [ADR-007](docs/adr/007-macos-seatbelt-pf-sandbox.md) for design rationale.
 
 ### Windows Support (claude-sandbox.ps1)
 
@@ -247,6 +289,7 @@ make build-base-podman  # Build Podman variant only
 make build-netjail  # Build network jail only (for bwrap mode)
 make test           # Test Docker container setup
 make test-bwrap     # Test bubblewrap sandbox mode
+make test-macos     # Test macOS sandbox mode (macOS only)
 make clean          # Clean up
 ```
 
@@ -283,6 +326,7 @@ Key design decisions are documented in `docs/adr/`:
 - [ADR-004](docs/adr/004-replace-seccomp-unconfined.md): Why we use a custom seccomp profile
 - [ADR-005](docs/adr/005-no-new-privileges-incompatible.md): Why `no-new-privileges` can't be used
 - [ADR-006](docs/adr/006-adopt-podman-rootless.md): Why Podman rootless is the chosen DinD approach
+- [ADR-007](docs/adr/007-macos-seatbelt-pf-sandbox.md): macOS sandbox using Seatbelt + pf + Docker netjail
 
 ## Notes
 
